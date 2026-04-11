@@ -1,5 +1,9 @@
 {
   "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/sjordan/Code"]
+    },
     "cocoindex-code": {
       "command": "uvx",
       "args": ["--prerelease=explicit", "--with", "cocoindex>=1.0.0a18", "cocoindex-code@latest"],
