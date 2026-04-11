@@ -502,7 +502,200 @@ Service UUID: 0xHVSN (custom)
 
 ---
 
-## 8. Future Enhancements
+## 8. HiveSense iOS App Integration Spec
+
+This section defines what must be built in the HiveSense iOS app (separate repo: `sjordan0228/hivesense`) to receive, store, and display sensor data from the monitoring hardware.
+
+### 8.1 Existing App Context
+
+The HiveSense iOS app is a SwiftUI + SwiftData app (iOS 17+) for beekeepers. It already has:
+- Yard and Hive models in SwiftData with full CRUD
+- NFC tag read/write for hive identification
+- Voice-based inspections via WhisperKit
+- Inspection, Feeding, MiteCount, Cost, Treatment record forms
+- Subscription tiers (Free/Pro/Sideliner/Commercial) via StoreKit 2
+- Photo capture and storage
+- Reports with SwiftData aggregations
+
+The IoT monitoring adds a new data layer — continuous sensor readings alongside the existing manual inspection data.
+
+### 8.2 New SwiftData Model — SensorReading
+
+```swift
+@Model
+final class SensorReading {
+    var id: UUID
+    var timestamp: Date
+    var weightKg: Double?
+    var tempInternal: Double?     // °C
+    var tempExternal: Double?     // °C
+    var humidityInternal: Double? // % RH
+    var humidityExternal: Double? // % RH
+    var beesIn: Int?
+    var beesOut: Int?
+    var beesActivity: Int?        // rolling 30-min count
+    var batteryPercent: Int?
+    var source: ReadingSource      // .ble or .mqtt
+
+    var hive: Hive?
+
+    init(timestamp: Date, source: ReadingSource) {
+        self.id = UUID()
+        self.timestamp = timestamp
+        self.source = source
+    }
+}
+
+enum ReadingSource: UInt8, Codable, CaseIterable {
+    case ble = 0
+    case mqtt = 1
+}
+```
+
+Relationship: `Hive` gets a new `@Relationship(deleteRule: .cascade, inverse: \SensorReading.hive) var sensorReadings: [SensorReading]`
+
+### 8.3 BLE Integration — CoreBluetooth
+
+**Service:** HiveSenseBLEService (new file)
+- Scans for peripherals advertising the HiveSense service UUID
+- Discovers hive nodes, reads their hive ID characteristic
+- Matches to existing Hive in SwiftData by hiveId
+- Downloads sensor log characteristic (array of readings)
+- Writes clear command after successful download
+- Uses `CBCentralManager` and `CBPeripheral` delegates
+
+**BLE Flow in App:**
+1. User opens Yard Mode or Scan tab → app starts BLE scan
+2. Discovers HiveSense peripherals → shows "3 hives with sensor data"
+3. User taps "Sync Sensors" → connects to each, downloads logs
+4. Creates `SensorReading` entries in SwiftData, linked to matching Hive
+5. Sends clear command to ESP32 → frees flash storage
+
+**Pairing Flow:**
+1. User goes to YardDetailScreen → taps "Pair Sensor" on a hive
+2. App scans for unpaired HiveSense BLE devices
+3. User selects the device (identified by signal strength / proximity)
+4. App writes the hive's `hiveId` to the BLE device's Hive ID characteristic
+5. Stores the device's MAC address on the Hive model for future auto-connect
+
+**New Hive model properties:**
+```swift
+var sensorMacAddress: String?  // BLE MAC of paired ESP32
+var lastSensorSync: Date?      // when data was last pulled
+```
+
+### 8.4 MQTT Integration — CocoaMQTT
+
+**Dependency:** CocoaMQTT (Swift, SPM compatible)
+
+**Service:** MQTTService (new file, @MainActor ObservableObject)
+- Connects to HiveMQ Cloud endpoint via TLS
+- Subscribes to `hivesense/hive/+/#`
+- Parses incoming messages into `SensorReading` entries
+- Resolves hive ID from topic path → links to SwiftData Hive
+- Runs as background service, reconnects on disconnect
+
+**Configuration stored in @AppStorage:**
+```swift
+@AppStorage("mqttBrokerHost") var brokerHost: String = ""
+@AppStorage("mqttBrokerPort") var brokerPort: Int = 8883
+@AppStorage("mqttUsername") var mqttUsername: String = ""
+@AppStorage("mqttPassword") var mqttPassword: String = ""  // should use Keychain in production
+@AppStorage("mqttEnabled") var mqttEnabled: Bool = false
+```
+
+**Settings UI:** New "Cloud Monitoring" section in SettingsScreen
+- Toggle to enable/disable MQTT
+- Broker host, port, username, password fields
+- Connection status indicator
+- "Test Connection" button
+
+### 8.5 UI — Sensor Tab on HiveDetailScreen
+
+Add a 6th tab "Sensors" to the HiveDetailScreen segmented picker.
+
+**SensorsTab layout:**
+```
+┌─────────────────────────────────┐
+│ Weight Trend (7-day chart)      │
+│ ┌─────────────────────────────┐ │
+│ │  📈 Line chart              │ │
+│ │  Current: 85.2 kg           │ │
+│ │  Change: +2.3 kg this week  │ │
+│ └─────────────────────────────┘ │
+│                                 │
+│ Temperature & Humidity          │
+│ ┌──────────┐ ┌──────────┐      │
+│ │ Internal │ │ External │      │
+│ │ 34.8°C   │ │ 28.2°C   │      │
+│ │ 62% RH   │ │ 45% RH   │      │
+│ └──────────┘ └──────────┘      │
+│                                 │
+│ Bee Traffic (today)             │
+│ ┌─────────────────────────────┐ │
+│ │  In: 4,230   Out: 4,180    │ │
+│ │  Net: +50    Activity: 847 │ │
+│ └─────────────────────────────┘ │
+│                                 │
+│ Battery: 87% ████████░░        │
+│ Last sync: 2 min ago            │
+└─────────────────────────────────┘
+```
+
+**Charts:** Use Swift Charts framework (iOS 16+) for weight trend lines and bee traffic bar charts.
+
+### 8.6 Alerts & Notifications
+
+**Alert conditions (configurable thresholds in Settings):**
+
+| Alert | Default Trigger | Severity |
+|---|---|---|
+| Weight drop | > 3 kg in 1 hour | Critical (possible swarm) |
+| Weight drop | > 1 kg/day sustained | Warning (consuming stores) |
+| Internal temp drop | Below 32°C (90°F) | Warning (weak cluster) |
+| Internal temp spike | Above 40°C (104°F) | Warning (overheating) |
+| Humidity high | Above 80% RH internal | Warning (moisture/disease risk) |
+| Bee traffic zero | No activity for 2+ hours during daytime | Critical (colony loss) |
+| Battery low | Below 20% | Info |
+| Sensor offline | No data for 2+ hours | Warning |
+
+**Implementation:**
+- `SensorAlertService` checks incoming readings against thresholds
+- Triggers local notifications via `UNUserNotificationCenter`
+- Shows alert badges on Dashboard "Alerts" metric card
+- Alerts displayed on HiveDetailScreen sensors tab
+
+### 8.7 Dashboard Integration
+
+The existing DashboardScreen metrics row gets updated:
+- **"Sensors"** metric card showing how many hives have active sensor nodes
+- **Alerts** count includes sensor-triggered alerts
+- **Needs Attention** section includes sensor anomalies
+
+### 8.8 Files to Create in HiveSense iOS App
+
+| File | Purpose |
+|---|---|
+| `HiveSense/Models/SensorReading.swift` | SwiftData model |
+| `HiveSense/Models/Enums/ReadingSource.swift` | BLE vs MQTT source enum |
+| `HiveSense/Services/HiveSenseBLEService.swift` | CoreBluetooth BLE client |
+| `HiveSense/Services/MQTTService.swift` | CocoaMQTT wrapper |
+| `HiveSense/Services/SensorAlertService.swift` | Threshold checking + notifications |
+| `HiveSense/Features/Hive/SensorsTab.swift` | Sensor data display with charts |
+| `HiveSense/Features/Settings/CloudMonitoringView.swift` | MQTT configuration UI |
+| `HiveSense/Features/Yard/SensorSyncView.swift` | BLE sync UI for yard visits |
+
+### 8.9 Dependencies to Add
+
+| Package | Purpose | SPM URL |
+|---|---|---|
+| CocoaMQTT | MQTT client | `https://github.com/emqx/CocoaMQTT.git` |
+| Swift Charts | Already in iOS 16+ SDK | Built-in framework |
+| CoreBluetooth | BLE | Built-in framework |
+
+---
+
+## 9. Future Enhancements
 
 - **RFID hive identification** — NFC tag per hive for automatic node-to-hive association (already built in HiveSense app)
 - **Audio monitoring** — microphone + FFT analysis for swarm detection via colony sound signature changes
