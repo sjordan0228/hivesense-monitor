@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include "config.h"
 #include "types.h"
+#include "power_manager.h"
 
 // RTC memory survives light sleep, resets on deep sleep power-on
 RTC_DATA_ATTR static NodeState currentState = NodeState::BOOT;
@@ -19,6 +20,8 @@ void setup() {
     if (wakeupReason == ESP_SLEEP_WAKEUP_UNDEFINED) {
         currentState = NodeState::BOOT;
     }
+
+    PowerManager::initialize();
 }
 
 void loop() {
@@ -44,15 +47,15 @@ void loop() {
             break;
 
         case NodeState::DAYTIME_IDLE:
-            Serial.println("[STATE] DAYTIME_IDLE — TODO: light sleep");
-            delay(5000);
+            Serial.println("[STATE] DAYTIME_IDLE — entering light sleep");
+            PowerManager::enableLightSleep();
             currentState = NodeState::SENSOR_READ;
             break;
 
         case NodeState::NIGHTTIME_SLEEP:
-            Serial.println("[STATE] NIGHTTIME_SLEEP — TODO: deep sleep");
-            delay(5000);
-            currentState = NodeState::SENSOR_READ;
+            Serial.println("[STATE] NIGHTTIME_SLEEP — entering deep sleep");
+            PowerManager::enterDeepSleep(DEFAULT_READ_INTERVAL_MIN);
+            // Does not return — wakes up through setup()
             break;
 
         case NodeState::BLE_SYNC:
