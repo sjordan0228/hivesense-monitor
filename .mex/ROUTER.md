@@ -1,7 +1,7 @@
 ---
 name: router
 description: Session bootstrap and navigation hub. Read at the start of every session before any task.
-last_updated: 2026-04-11 (cellular module added)
+last_updated: 2026-04-11 (self-OTA module added)
 ---
 
 # Session Bootstrap
@@ -29,7 +29,7 @@ Read this file fully before doing anything else in this session.
 
 ### Not yet built
 - Phase 2: IR bee counter (8-pair beam-break array via CD74HC4067 mux)
-- Yard collector firmware (LilyGO T-SIM7080G) — ESP-NOW receiver and cellular module (SIM7080G powerOn/powerOff/waitForNetwork/syncNtp) done; MQTT publisher, OTA relay module remaining
+- Yard collector firmware (LilyGO T-SIM7080G) — ESP-NOW receiver, cellular module, MQTT publisher, and self-OTA module done; OTA relay module (forwarding updates to hive nodes) remaining
 - HiveSense iOS app sensor integration (BLE, MQTT, SensorReading model, SensorsTab)
 - 3D printed enclosures and sensor gate
 - HiveMQ Cloud account setup
