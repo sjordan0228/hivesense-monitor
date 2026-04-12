@@ -18,3 +18,4 @@ build/
 
 # Ollama output artifacts
 ollama-output-*.md
+tools/.venv/
