@@ -4,6 +4,7 @@
 #include "state_machine.h"
 #include "power_manager.h"
 #include "storage.h"
+#include "serial_console.h"
 
 RTC_DATA_ATTR static uint32_t bootCount = 0;
 
@@ -12,6 +13,8 @@ void setup() {
     bootCount++;
 
     Serial.printf("\n[MAIN] HiveSense Node — Phase 1 | Boot #%u\n", bootCount);
+
+    SerialConsole::checkForConsole();
 
     PowerManager::initialize();
     Storage::initialize();

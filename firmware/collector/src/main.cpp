@@ -7,6 +7,7 @@
 #include "time_sync.h"
 #include "ota_relay.h"
 #include "ota_self.h"
+#include "serial_console.h"
 
 namespace {
 
@@ -63,6 +64,8 @@ void runPublishCycle() {
 void setup() {
     Serial.begin(115200);
     Serial.println("\n[MAIN] HiveSense Collector — starting");
+
+    SerialConsole::checkForConsole();
 
     OtaSelf::validateNewFirmware();
     EspNowReceiver::initialize();
