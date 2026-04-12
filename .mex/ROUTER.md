@@ -2,7 +2,6 @@
 name: router
 description: Session bootstrap and navigation hub. Read at the start of every session before any task.
 last_updated: 2026-04-11
-firmware_task: 8_complete
 ---
 
 # Session Bootstrap
@@ -11,20 +10,24 @@ Read this file fully before doing anything else in this session.
 
 ## Current Project State
 
-**Phase: Design Complete, Hardware Not Ordered**
+**Phase: Phase 1 Firmware Complete — Awaiting Hardware for Validation**
 
-The hardware datasheet (README.md) covers the full system design:
-- ESP32-WROOM-32 hive nodes with SHT31 temp/humidity, HX711 weight, IR bee counter
-- LilyGO T-SIM7080G yard collector with cellular MQTT
-- HiveMQ Cloud MQTT broker (free tier)
-- BLE direct + MQTT cloud dual communication
-- iOS app integration spec (Section 8 of README.md)
+### Completed
+- Hardware datasheet and design spec (README.md)
+- Phase 1 hive node firmware (`firmware/`) — all modules built, compiles clean
+  - State machine dispatcher with power-aware sleep/wake cycle
+  - SHT31 dual temp/humidity (internal 0x44 + external 0x45)
+  - HX711 weight with NVS calibration and MOSFET gating
+  - Battery ADC with calibrated voltage-to-percent
+  - ESP-NOW transmit with 3-retry logic
+  - BLE GATT server with sensor log sync, pairing, and log clear
+  - LittleFS circular buffer storage (500 readings)
+  - Deep sleep (nighttime) + light sleep (daytime) power management
+- Build: 77.5% flash, 17.4% RAM (no_ota partition, espressif32 v6.5)
 
-**In progress:**
-- ESP32 firmware (Arduino/PlatformIO) — Task 8 complete: ESP-NOW communication module (comms_espnow.cpp). WiFi STA init, NVS collector MAC load, up to 3 retries with 1 s ACK timeout and 2 s inter-retry delay, RSSI population on success. Builds clean.
-
-**Not yet built:**
-- Yard collector firmware
+### Not yet built
+- Phase 2: IR bee counter (8-pair beam-break array via CD74HC4067 mux)
+- Yard collector firmware (LilyGO T-SIM7080G)
 - HiveSense iOS app sensor integration (BLE, MQTT, SensorReading model, SensorsTab)
 - 3D printed enclosures and sensor gate
 - HiveMQ Cloud account setup
