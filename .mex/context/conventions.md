@@ -10,11 +10,13 @@ last_updated: 2026-04-11
 
 ```
 hivesense-monitor/
-  firmware/           — ESP32 hive node firmware (PlatformIO/Arduino)
-  collector/          — LilyGO T-SIM7080G collector firmware
-  hardware/           — Schematics, PCB layouts, 3D print files
-  docs/               — Additional documentation
-  README.md           — Hardware datasheet (primary design doc)
+  firmware/
+    hive-node/       — Freenove ESP32-S3 Lite hive node firmware
+    collector/       — LilyGO T-SIM7080G yard collector firmware
+    shared/          — Headers shared between both firmwares (HivePayload, OTA protocol)
+  hardware/          — Schematics, PCB layouts, 3D print files
+  docs/              — Design specs, implementation plans
+  README.md          — Hardware datasheet (primary design doc)
 ```
 
 ## Engineering Principles

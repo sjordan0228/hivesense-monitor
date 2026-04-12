@@ -10,24 +10,26 @@ Read this file fully before doing anything else in this session.
 
 ## Current Project State
 
-**Phase: Phase 1 Firmware Complete — Awaiting Hardware for Validation**
+**Phase: Phase 1 Firmware Complete + OTA — ESP32-S3, Awaiting Hardware**
 
 ### Completed
 - Hardware datasheet and design spec (README.md)
-- Phase 1 hive node firmware (`firmware/hive-node/`) — all modules built, compiles clean
+- Phase 1 hive node firmware (`firmware/hive-node/`) — Freenove ESP32-S3 Lite (8MB flash)
   - State machine dispatcher with power-aware sleep/wake cycle
   - SHT31 dual temp/humidity (internal 0x44 + external 0x45)
   - HX711 weight with NVS calibration and MOSFET gating
   - Battery ADC with calibrated voltage-to-percent
   - ESP-NOW transmit with 3-retry logic
-  - BLE GATT server with sensor log sync, pairing, and log clear
+  - BLE GATT server (NimBLE) with sensor log sync, pairing, and log clear
   - LittleFS circular buffer storage (500 readings)
   - Deep sleep (nighttime) + light sleep (daytime) power management
-- Build: 77.5% flash, 17.4% RAM (no_ota partition, espressif32 v6.5)
+  - OTA update receive module with CRC32 validation and auto-rollback
+  - Shared headers (`firmware/shared/`) for HivePayload and OTA protocol
+- Build: 27.5% flash (1.0 MB of 3.5 MB), 15.4% RAM, OTA dual partition (8MB flash)
 
 ### Not yet built
 - Phase 2: IR bee counter (8-pair beam-break array via CD74HC4067 mux)
-- Yard collector firmware (LilyGO T-SIM7080G)
+- Yard collector firmware (LilyGO T-SIM7080G) — includes OTA relay module
 - HiveSense iOS app sensor integration (BLE, MQTT, SensorReading model, SensorsTab)
 - 3D printed enclosures and sensor gate
 - HiveMQ Cloud account setup
