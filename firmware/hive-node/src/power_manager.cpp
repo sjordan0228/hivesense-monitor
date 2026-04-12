@@ -11,8 +11,9 @@
 namespace PowerManager {
 
 void disableOnboardLed() {
-    pinMode(PIN_ONBOARD_RGB, OUTPUT);
-    digitalWrite(PIN_ONBOARD_RGB, LOW);
+    // WS2812 needs a data frame of zeros to turn off — simple LOW doesn't work
+    neopixelWrite(PIN_ONBOARD_RGB, 0, 0, 0);
+    Serial.println("[POWER] RGB LED off");
 }
 
 void initialize() {

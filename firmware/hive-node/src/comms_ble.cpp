@@ -22,6 +22,7 @@ NimBLECharacteristic* charClearLog     = nullptr;
 // Written from BLE callback context, read from main task
 volatile bool deviceConnected = false;
 volatile bool syncComplete    = false;
+volatile bool sensorLogSubscribed = false;
 
 // ---------------------------------------------------------------------------
 // BLE Callbacks
@@ -38,6 +39,16 @@ class ServerCallbacks : public NimBLEServerCallbacks {
         deviceConnected = false;
         syncComplete    = true;
         Serial.println("[BLE] Phone disconnected");
+    }
+};
+
+/// Detects when phone subscribes to sensor log notifications.
+class SensorLogCallback : public NimBLECharacteristicCallbacks {
+    void onSubscribe(NimBLECharacteristic* characteristic, ble_gap_conn_desc* desc, uint16_t subValue) override {
+        if (subValue == 1 || subValue == 2) {  // notify or indicate
+            sensorLogSubscribed = true;
+            Serial.println("[BLE] Phone subscribed to sensor log");
+        }
     }
 };
 
@@ -134,7 +145,7 @@ bool initialize() {
         BLE_CHAR_SENSOR_LOG,
         NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
     );
-    // NimBLE handles CCCD (BLE2902) descriptors automatically for notify characteristics
+    charSensorLog->setCallbacks(new SensorLogCallback());
 
     // Reading Count — phone reads this to know how many readings to expect
     charReadingCount = service->createCharacteristic(
@@ -167,8 +178,9 @@ bool initialize() {
 }
 
 bool advertiseAndWait(uint16_t timeoutMs) {
-    deviceConnected = false;
-    syncComplete    = false;
+    deviceConnected      = false;
+    syncComplete         = false;
+    sensorLogSubscribed  = false;
 
     NimBLEAdvertising* advertising = NimBLEDevice::getAdvertising();
     advertising->addServiceUUID(BLE_SERVICE_UUID);
@@ -178,6 +190,7 @@ bool advertiseAndWait(uint16_t timeoutMs) {
 
     Serial.printf("[BLE] Advertising for %u ms\n", timeoutMs);
 
+    // Wait for connection
     uint32_t deadline = millis() + timeoutMs;
     while (!deviceConnected && millis() < deadline) {
         delay(100);
@@ -189,7 +202,18 @@ bool advertiseAndWait(uint16_t timeoutMs) {
         return false;
     }
 
-    // Phone connected — send stored readings
+    // Wait for phone to subscribe to sensor log notifications
+    Serial.println("[BLE] Connected — waiting for sensor log subscription...");
+    deadline = millis() + 10000;  // 10 second timeout for subscription
+    while (!sensorLogSubscribed && deviceConnected && millis() < deadline) {
+        delay(50);
+    }
+
+    if (!sensorLogSubscribed) {
+        Serial.println("[BLE] Phone did not subscribe — skipping data send");
+        return true;  // Still connected, just no data transfer
+    }
+
     sendStoredReadings();
     return true;
 }
