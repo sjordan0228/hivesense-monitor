@@ -1,6 +1,6 @@
 #include "comms_espnow.h"
-#include "../include/config.h"
-#include "../include/types.h"
+#include "config.h"
+#include "types.h"
 
 #include <Arduino.h>
 #include <WiFi.h>
