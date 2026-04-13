@@ -8,6 +8,7 @@
 #include "comms_ble.h"
 #include "storage.h"
 #include "ota_update.h"
+#include "ble_tag_reader.h"
 
 #include <Arduino.h>
 #include <esp_sleep.h>
@@ -73,10 +74,22 @@ NodeState executeState(NodeState current, HivePayload& payload) {
             Battery::initialize();
             Battery::readMeasurements(payload);
 
-            // Read temperature and humidity
+            // Read internal temp/humidity from wireless sensor tag (if configured)
+            if (BleTagReader::scan(5000)) {
+                payload.temp_internal = BleTagReader::getTemperature();
+                payload.humidity_internal = BleTagReader::getHumidity();
+            }
+
+            // Read external temp/humidity from wired SHT31 on enclosure
             SensorSHT31::initialize();
             SensorSHT31::readMeasurements(payload);
             SensorSHT31::enterSleep();
+
+            // If tag provided internal readings, keep them over SHT31's values
+            if (!isnan(BleTagReader::getTemperature())) {
+                payload.temp_internal = BleTagReader::getTemperature();
+                payload.humidity_internal = BleTagReader::getHumidity();
+            }
 
             // Read weight (MOSFET controlled by PowerManager)
             PowerManager::powerOnWeightSensor();

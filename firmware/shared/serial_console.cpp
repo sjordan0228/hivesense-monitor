@@ -12,7 +12,8 @@ constexpr uint16_t CONSOLE_WAIT_MS = 3000;
 
 const char* knownKeys[] = {
     "hive_id", "collector_mac", "day_start", "day_end", "read_interval",
-    "weight_off", "weight_scl", "mqtt_host", "mqtt_port", "mqtt_user", "mqtt_pass"
+    "weight_off", "weight_scl", "mqtt_host", "mqtt_port", "mqtt_user", "mqtt_pass",
+    "tag_name", "adv_interval"
 };
 constexpr uint8_t NUM_KNOWN_KEYS = sizeof(knownKeys) / sizeof(knownKeys[0]);
 
