@@ -10,7 +10,7 @@ Read this file fully before doing anything else in this session.
 
 ## Current Project State
 
-**Phase: Both Firmwares Complete — Awaiting Hardware**
+**Phase: All Three Firmwares Complete — Awaiting Hardware**
 
 ### Completed
 - Hardware datasheet and design spec (README.md)
@@ -21,7 +21,8 @@ Read this file fully before doing anything else in this session.
   - BLE GATT server (NimBLE) with sensor log sync and pairing
   - LittleFS circular buffer storage (500 readings)
   - OTA update receive module with CRC32 and auto-rollback
-  - Build: 27.5% flash (1.0 MB of 3.5 MB)
+  - BLE tag reader for wireless internal sensor tag
+  - Build: 27.7% flash (1.0 MB of 3.5 MB)
 - Yard collector firmware (`firmware/collector/`) — LilyGO T-SIM7080G
   - ESP-NOW receiver with payload buffering and MAC tracking
   - Cellular module (TinyGSM, SIM7080G) with NTP sync
@@ -31,6 +32,10 @@ Read this file fully before doing anything else in this session.
   - Time sync broadcast to hive nodes every publish cycle
   - Build: 24.5% flash (900 KB of 3.5 MB)
 - Shared protocol headers (`firmware/shared/`)
+- Wireless sensor tag firmware (`firmware/sensor-tag/`) — XIAO ESP32-C6
+  - BLE advertisement with temp/humidity from SHT31
+  - Deep sleep cycle (60s interval), CR2032 powered
+  - Build: 38% flash (1.2 MB of 3.0 MB)
 
 ### Not yet built
 - Phase 2: IR bee counter (8-pair beam-break array via CD74HC4067 mux)
