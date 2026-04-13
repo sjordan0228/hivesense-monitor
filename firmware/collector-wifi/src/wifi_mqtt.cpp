@@ -105,8 +105,8 @@ uint8_t publishBatch(PayloadBuffer& buffer) {
     char value[16];
 
     const char* suffixes[] = {
-        "weight", "temp/internal", "temp/external",
-        "humidity/internal", "humidity/external",
+        "weight", "temp/brood", "temp/top",
+        "humidity/brood", "humidity/top",
         "bees/in", "bees/out", "bees/activity",
         "battery", "rssi"
     };
@@ -118,10 +118,10 @@ uint8_t publishBatch(PayloadBuffer& buffer) {
 
         char values[10][16];
         snprintf(values[0], 16, "%.2f", p.weight_kg);
-        snprintf(values[1], 16, "%.1f", p.temp_internal);
-        snprintf(values[2], 16, "%.1f", p.temp_external);
-        snprintf(values[3], 16, "%.1f", p.humidity_internal);
-        snprintf(values[4], 16, "%.1f", p.humidity_external);
+        snprintf(values[1], 16, "%.1f", p.temp_brood);
+        snprintf(values[2], 16, "%.1f", p.temp_top);
+        snprintf(values[3], 16, "%.1f", p.humidity_brood);
+        snprintf(values[4], 16, "%.1f", p.humidity_top);
         snprintf(values[5], 16, "%u", p.bees_in);
         snprintf(values[6], 16, "%u", p.bees_out);
         snprintf(values[7], 16, "%u", p.bees_activity);

@@ -1,7 +1,6 @@
 #include "state_machine.h"
 #include "config.h"
 #include "power_manager.h"
-#include "sensor_sht31.h"
 #include "sensor_hx711.h"
 #include "battery.h"
 #include "comms_espnow.h"
@@ -74,21 +73,16 @@ NodeState executeState(NodeState current, HivePayload& payload) {
             Battery::initialize();
             Battery::readMeasurements(payload);
 
-            // Read internal temp/humidity from wireless sensor tag (if configured)
+            // Read temp/humidity from wireless sensor tags
             if (BleTagReader::scan(5000)) {
-                payload.temp_internal = BleTagReader::getTemperature();
-                payload.humidity_internal = BleTagReader::getHumidity();
-            }
-
-            // Read external temp/humidity from wired SHT31 on enclosure
-            SensorSHT31::initialize();
-            SensorSHT31::readMeasurements(payload);
-            SensorSHT31::enterSleep();
-
-            // If tag provided internal readings, keep them over SHT31's values
-            if (!isnan(BleTagReader::getTemperature())) {
-                payload.temp_internal = BleTagReader::getTemperature();
-                payload.humidity_internal = BleTagReader::getHumidity();
+                if (BleTagReader::broodTagFound()) {
+                    payload.temp_brood = BleTagReader::getBroodTemperature();
+                    payload.humidity_brood = BleTagReader::getBroodHumidity();
+                }
+                if (BleTagReader::topTagFound()) {
+                    payload.temp_top = BleTagReader::getTopTemperature();
+                    payload.humidity_top = BleTagReader::getTopHumidity();
+                }
             }
 
             // Read weight (MOSFET controlled by PowerManager)

@@ -2,19 +2,24 @@
 
 #include <cstdint>
 
-/// Scans for a HiveSense wireless sensor tag via BLE advertisement.
+/// Scans for up to two HiveSense wireless sensor tags via BLE advertisement.
+/// Tag 1 = brood box (bottom), Tag 2 = top (super/upper box).
 namespace BleTagReader {
 
-    /// Scan for the configured tag name. Blocks for timeoutMs.
+    /// Scan for configured tags. Blocks for timeoutMs.
+    /// Finds tag_name (brood) and tag_name_2 (top) in one scan pass.
     bool scan(uint16_t timeoutMs);
 
-    /// Get last received temperature (°C). Returns NAN if no tag found.
-    float getTemperature();
+    /// Brood box tag (tag_name)
+    float getBroodTemperature();
+    float getBroodHumidity();
+    uint8_t getBroodBattery();
+    bool broodTagFound();
 
-    /// Get last received humidity (%RH). Returns NAN if no tag found.
-    float getHumidity();
-
-    /// Get last received battery percentage. Returns 0 if no tag found.
-    uint8_t getBattery();
+    /// Top tag (tag_name_2)
+    float getTopTemperature();
+    float getTopHumidity();
+    uint8_t getTopBattery();
+    bool topTagFound();
 
 }  // namespace BleTagReader

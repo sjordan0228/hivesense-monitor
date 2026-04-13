@@ -13,46 +13,81 @@ constexpr uint16_t MANUFACTURER_ID      = 0xFFFF;
 constexpr uint8_t  TAG_PROTOCOL_VERSION = 0x01;
 constexpr uint8_t  MFG_DATA_LENGTH      = 8;
 
-float   lastTemp    = NAN;
-float   lastHum     = NAN;
-uint8_t lastBattery = 0;
-bool    tagFound    = false;
+// Brood box tag (tag_name)
+float   broodTemp    = NAN;
+float   broodHum     = NAN;
+uint8_t broodBatt    = 0;
+bool    broodFound   = false;
 
-char targetTagName[32] = "";
+// Top tag (tag_name_2)
+float   topTemp      = NAN;
+float   topHum       = NAN;
+uint8_t topBatt      = 0;
+bool    topFound     = false;
 
-bool parseMfgData(const std::string& mfgData) {
+char broodTagName[32] = "";
+char topTagName[32]   = "";
+
+struct TagData {
+    float*   temp;
+    float*   hum;
+    uint8_t* batt;
+    bool*    found;
+};
+
+bool parseMfgData(const std::string& mfgData, TagData& tag) {
     if (mfgData.length() < MFG_DATA_LENGTH) return false;
 
     const uint8_t* d = reinterpret_cast<const uint8_t*>(mfgData.data());
 
     uint16_t mfgId = d[0] | (d[1] << 8);
     if (mfgId != MANUFACTURER_ID) return false;
-
     if (d[2] != TAG_PROTOCOL_VERSION) return false;
 
     int16_t rawTemp = d[3] | (d[4] << 8);
-    lastTemp = (rawTemp / 100.0f) - 40.0f;
+    *tag.temp = (rawTemp / 100.0f) - 40.0f;
 
     uint16_t rawHum = d[5] | (d[6] << 8);
-    lastHum = rawHum / 100.0f;
+    *tag.hum = rawHum / 100.0f;
 
-    lastBattery = d[7];
+    *tag.batt = d[7];
+    *tag.found = true;
 
     return true;
 }
 
 class TagScanCallbacks : public NimBLEAdvertisedDeviceCallbacks {
     void onResult(NimBLEAdvertisedDevice* device) override {
-        if (strlen(targetTagName) == 0) return;
-        if (!device->haveName()) return;
-        if (strcmp(device->getName().c_str(), targetTagName) != 0) return;
-        if (!device->haveManufacturerData()) return;
+        if (!device->haveName() || !device->haveManufacturerData()) return;
 
+        const char* name = device->getName().c_str();
         std::string mfgData = device->getManufacturerData();
-        if (parseMfgData(mfgData)) {
-            tagFound = true;
-            Serial.printf("[TAGREADER] %s: T=%.1fC H=%.1f%% B=%u%%\n",
-                          targetTagName, lastTemp, lastHum, lastBattery);
+
+        // Check brood tag
+        if (strlen(broodTagName) > 0 && !broodFound &&
+            strcmp(name, broodTagName) == 0) {
+            TagData tag = {&broodTemp, &broodHum, &broodBatt, &broodFound};
+            if (parseMfgData(mfgData, tag)) {
+                Serial.printf("[TAGREADER] Brood: %s T=%.1fC H=%.1f%% B=%u%%\n",
+                              broodTagName, broodTemp, broodHum, broodBatt);
+            }
+        }
+
+        // Check top tag
+        if (strlen(topTagName) > 0 && !topFound &&
+            strcmp(name, topTagName) == 0) {
+            TagData tag = {&topTemp, &topHum, &topBatt, &topFound};
+            if (parseMfgData(mfgData, tag)) {
+                Serial.printf("[TAGREADER] Top: %s T=%.1fC H=%.1f%% B=%u%%\n",
+                              topTagName, topTemp, topHum, topBatt);
+            }
+        }
+
+        // Stop scan if we found everything we're looking for
+        bool allFound = true;
+        if (strlen(broodTagName) > 0 && !broodFound) allFound = false;
+        if (strlen(topTagName) > 0 && !topFound) allFound = false;
+        if (allFound) {
             NimBLEDevice::getScan()->stop();
         }
     }
@@ -67,19 +102,19 @@ namespace BleTagReader {
 bool scan(uint16_t timeoutMs) {
     Preferences prefs;
     prefs.begin(NVS_NAMESPACE, true);
-    String name = prefs.getString("tag_name", "");
+    String name1 = prefs.getString("tag_name", "");
+    String name2 = prefs.getString("tag_name_2", "");
     prefs.end();
 
-    if (name.length() == 0) {
+    if (name1.length() == 0 && name2.length() == 0) {
         return false;
     }
 
-    strncpy(targetTagName, name.c_str(), sizeof(targetTagName) - 1);
+    strncpy(broodTagName, name1.c_str(), sizeof(broodTagName) - 1);
+    strncpy(topTagName, name2.c_str(), sizeof(topTagName) - 1);
 
-    tagFound    = false;
-    lastTemp    = NAN;
-    lastHum     = NAN;
-    lastBattery = 0;
+    broodTemp = NAN;  broodHum = NAN;  broodBatt = 0;  broodFound = false;
+    topTemp   = NAN;  topHum   = NAN;  topBatt   = 0;  topFound   = false;
 
     NimBLEDevice::init("");
 
@@ -89,18 +124,25 @@ bool scan(uint16_t timeoutMs) {
     scan->setInterval(100);
     scan->setWindow(100);
 
-    Serial.printf("[TAGREADER] Scanning for '%s' (%ums)\n", targetTagName, timeoutMs);
+    Serial.printf("[TAGREADER] Scanning for '%s' + '%s' (%ums)\n",
+                  broodTagName, topTagName, timeoutMs);
 
     scan->start(timeoutMs / 1000, false);
 
     scan->clearResults();
     NimBLEDevice::deinit(true);
 
-    return tagFound;
+    return broodFound || topFound;
 }
 
-float getTemperature()  { return lastTemp; }
-float getHumidity()     { return lastHum; }
-uint8_t getBattery()    { return lastBattery; }
+float getBroodTemperature()  { return broodTemp; }
+float getBroodHumidity()     { return broodHum; }
+uint8_t getBroodBattery()    { return broodBatt; }
+bool broodTagFound()         { return broodFound; }
+
+float getTopTemperature()    { return topTemp; }
+float getTopHumidity()       { return topHum; }
+uint8_t getTopBattery()      { return topBatt; }
+bool topTagFound()           { return topFound; }
 
 }  // namespace BleTagReader

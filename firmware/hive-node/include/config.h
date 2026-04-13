@@ -8,9 +8,8 @@
 // GPIO 26-32 reserved for flash/PSRAM. GPIO 0,3,45,46 are strapping pins.
 // =============================================================================
 
-// I2C bus (SHT31 x2) — S3 hardware default
-constexpr uint8_t PIN_I2C_SDA = 8;
-constexpr uint8_t PIN_I2C_SCL = 9;
+// I2C pins freed — SHT31 removed, temp/humidity from wireless sensor tags
+// GPIO 8, 9 available for future use
 
 // HX711 weight ADC — adjacent pins for clean 2-wire run
 constexpr uint8_t PIN_HX711_DOUT   = 10;
@@ -33,13 +32,6 @@ constexpr uint8_t PIN_MUX_EN_RX  = 14;
 constexpr uint8_t PIN_MUX_SIG_TX = 15;  // Signal lines together
 constexpr uint8_t PIN_MUX_SIG_RX = 2;   // ADC1_CH1, internal pull-up for digital read
 constexpr uint8_t PIN_MOSFET_IR  = 16;
-
-// =============================================================================
-// I2C Addresses
-// =============================================================================
-
-constexpr uint8_t SHT31_ADDR_INTERNAL = 0x44;
-constexpr uint8_t SHT31_ADDR_EXTERNAL = 0x45;
 
 // =============================================================================
 // Timing Constants
