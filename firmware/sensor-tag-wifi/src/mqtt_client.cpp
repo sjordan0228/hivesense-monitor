@@ -39,7 +39,11 @@ bool connect(const char* deviceId) {
     loadConfig();
     pubsub.setServer(mqttHost, mqttPort);
     pubsub.setSocketTimeout(MQTT_CONNECT_TIMEOUT_MS / 1000);
-    pubsub.setBufferSize(PAYLOAD_MAX_LEN + 32);
+    // MQTT framing: 5B fixed header + 2B length + topic + payload. Topic scratch is 96B.
+    if (!pubsub.setBufferSize(PAYLOAD_MAX_LEN + 96 + 8)) {
+        Serial.println("[MQTT] setBufferSize failed");
+        return false;
+    }
 
     Serial.printf("[MQTT] connecting %s:%u as %s\n", mqttHost, mqttPort, deviceId);
     bool ok = (mqttUser[0] != '\0')
