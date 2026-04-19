@@ -52,6 +52,10 @@ void drainBuffer() {
         return;
     }
 
+    // Sync the RTC clock on every upload cycle. SNTP state persists across
+    // deep sleep once set, so subsequent samples get real timestamps.
+    WifiManager::getUnixTime();
+
     if (!MqttClient::connect(deviceId)) {
         Serial.println("[MAIN] no mqtt — keeping buffer");
         WifiManager::disconnect();
@@ -76,7 +80,6 @@ void drainBuffer() {
 void sampleAndEnqueue() {
     if (!Sensor::begin()) {
         Serial.println("[MAIN] sensor init failed — skipping sample");
-        Sensor::deinit();
         return;
     }
 
@@ -89,13 +92,13 @@ void sampleAndEnqueue() {
     }
 
     r.battery_pct = Battery::readPercent();
-    r.timestamp   = 0;   // Filled by NTP during drainBuffer if we have no time yet
 
-    // If we haven't set system time yet, tag with zero — the collector/backend
-    // can backfill. If time is already set (previous wake), use it.
-    time_t now;
+    // System clock is set by drainBuffer()'s NTP sync and persists across deep
+    // sleep. Samples taken before the first successful upload are tagged 0 and
+    // backfilled by the collector/backend.
+    time_t now = 0;
     time(&now);
-    if (now > 1700000000) r.timestamp = static_cast<uint32_t>(now);
+    r.timestamp = (now > 1700000000) ? static_cast<uint32_t>(now) : 0;
 
     RingBuffer::push(r);
     Serial.printf("[MAIN] sample t1=%.2f t2=%.2f h1=%.2f h2=%.2f b=%u buffered=%u\n",
@@ -129,8 +132,6 @@ void setup() {
     rtcSampleCounter++;
 
     if (rtcSampleCounter >= cfg.uploadEveryN) {
-        // If we don't yet have a valid timestamp on the oldest reading, do a
-        // quick NTP sync via the WiFi connect we'd do anyway.
         drainBuffer();
         rtcSampleCounter = 0;
     } else {
