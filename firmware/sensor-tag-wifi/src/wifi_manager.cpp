@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <Preferences.h>
+#include <esp_system.h>
 #include <time.h>
 #include <cstring>
 
@@ -39,6 +40,12 @@ bool connect() {
     if (ssid.length() == 0) {
         Serial.println("[WIFI] no SSID configured");
         return false;
+    }
+
+    // RTC memory only survives deep sleep. On any other reset (power-on,
+    // brownout, watchdog) the cached BSSID is garbage — invalidate it.
+    if (esp_reset_reason() != ESP_RST_DEEPSLEEP) {
+        rtcBssidValid = 0;
     }
 
     WiFi.mode(WIFI_STA);
