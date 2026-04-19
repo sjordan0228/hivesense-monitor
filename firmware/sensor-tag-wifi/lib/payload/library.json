@@ -1,0 +1,6 @@
+{
+    "name": "payload",
+    "version": "1.0.0",
+    "description": "JSON payload serializer for sensor readings",
+    "include": "."
+}
