@@ -28,7 +28,7 @@ void initDeviceId() {
 }
 
 struct Config {
-    uint32_t sampleIntervalSec;
+    uint16_t sampleIntervalSec;   // seconds (U16 matches serial console putUShort path)
     uint8_t  uploadEveryN;
 };
 
@@ -36,7 +36,7 @@ Config loadConfig() {
     Preferences prefs;
     prefs.begin(NVS_NAMESPACE, true);
     Config c {
-        .sampleIntervalSec = prefs.getUInt(NVS_KEY_SAMPLE_INT, DEFAULT_SAMPLE_INTERVAL_SEC),
+        .sampleIntervalSec = prefs.getUShort(NVS_KEY_SAMPLE_INT, DEFAULT_SAMPLE_INTERVAL_SEC),
         .uploadEveryN      = prefs.getUChar(NVS_KEY_UPLOAD_EVERY, DEFAULT_UPLOAD_EVERY_N),
     };
     prefs.end();

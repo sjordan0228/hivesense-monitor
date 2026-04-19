@@ -67,8 +67,8 @@ void printKeyValue(Preferences& prefs, const char* key) {
             Serial.printf("  %-15s = %.4f\n", key, prefs.getFloat(key, 0.0f));
             return;
         }
-        // Try ushort (mqtt_port)
-        if (strcmp(key, "mqtt_port") == 0) {
+        // Try ushort (mqtt_port, sample_int)
+        if (strcmp(key, "mqtt_port") == 0 || strcmp(key, "sample_int") == 0) {
             Serial.printf("  %-15s = %u\n", key, prefs.getUShort(key, 0));
             return;
         }

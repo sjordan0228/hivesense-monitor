@@ -21,7 +21,7 @@ constexpr uint8_t PIN_BATTERY_ADC = 0;
 // Power / Timing Defaults
 // =============================================================================
 
-constexpr uint32_t DEFAULT_SAMPLE_INTERVAL_SEC = 300;   // 5 min
+constexpr uint16_t DEFAULT_SAMPLE_INTERVAL_SEC = 300;   // 5 min (U16 max = 18h)
 constexpr uint8_t  DEFAULT_UPLOAD_EVERY_N      = 1;     // Upload every sample
 constexpr uint16_t WIFI_CONNECT_TIMEOUT_MS     = 10000;
 constexpr uint16_t MQTT_CONNECT_TIMEOUT_MS     = 5000;
