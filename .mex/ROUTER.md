@@ -1,19 +1,23 @@
 ---
 name: router
 description: Session bootstrap and navigation hub. Read at the start of every session before any task.
-last_updated: 2026-04-20 (combsense-tsdb LXC provisioned)
+last_updated: 2026-04-20 (history pipeline end-to-end; iOS HistoryService shipped)
 ---
 
 ## Infrastructure
 
 - **Mosquitto broker:** 192.168.1.82:1883 (user `hivesense`)
-- **combsense-tsdb LXC:** 192.168.1.19 — Proxmox LXC 124, NFS-backed, Debian 12
-  - InfluxDB 2.8: `:8086` (org `combsense`, bucket `combsense`, 30d retention)
-  - Grafana 13: `:3000`
-  - Telegraf: installed, not yet configured
-  - Tokens stored on the LXC at `/root/.combsense-tsdb-creds` (mode 600)
-  - Sandboxing drop-ins at `/etc/systemd/system/{grafana-server,telegraf}.service.d/override.conf` — required for unprivileged LXC
-
+- **combsense-tsdb LXC:** 192.168.1.19 — Proxmox LXC 124, NFS-backed, Debian 12 (unprivileged)
+  - **InfluxDB 2.8** on `:8086`, org `combsense`
+    - Buckets: `combsense` (raw, 30d) / `combsense_1h` (hourly, 365d) / `combsense_1d` (daily, ∞)
+    - Measurement: `sensor_reading`. Tag: `sensor_id`. Fields: `t1`, `t2`, `b`, `sensor_ts`.
+    - Downsample tasks live in Influx metadata; canonical copies in `deploy/tsdb/downsample-*.flux`
+  - **Grafana 13** on `:3000`
+  - **Telegraf** — MQTT consumer `combsense/hive/+/reading` → Influx; config mirrored at `deploy/tsdb/telegraf-combsense.conf`
+  - Tokens at `/root/.combsense-tsdb-creds` (mode 600): `admin_token`, `telegraf_write_token`, `ios_read_token`
+  - Systemd sandboxing drop-ins at `/etc/systemd/system/{grafana-server,telegraf}.service.d/override.conf` (required for unprivileged LXC — see memory)
+  - Daily Influx backup via `combsense-backup.timer` → `/var/backups/combsense-tsdb/`, 14-day retention
+- **Remote:** only `origin` on GitHub (`sjordan0228/combsense-monitor`). Branches: `main` (prod), `dev` (integration).
 
 # Session Bootstrap
 
@@ -21,7 +25,7 @@ Read this file fully before doing anything else in this session.
 
 ## Current Project State
 
-**Phase: sensor-tag-wifi bench-validated on DS18B20 — hive-node + collector awaiting hardware**
+**Phase: home-yard pipeline live (firmware → MQTT → Influx → iOS history graph). Apiary-side hive-node + collector await hardware.**
 
 ### Completed
 - Hardware datasheet and design spec (README.md)
@@ -53,19 +57,27 @@ Read this file fully before doing anything else in this session.
   - BSSID caching in RTC for fast reconnect
   - 18650 + solar powered, 5-min sample cadence by default
   - Native Unity tests for payload serialization (6 passing, incl. t=0 case)
-  - Epoch timestamps via NTP sync in drainBuffer(); pre-sync readings emit t=0
-  - Bench-validated with DS18B20: end-to-end publish to Mosquitto at 192.168.1.82 works
+  - Epoch timestamps via NTP sync in `drainBuffer()` — persists across deep sleep via RTC; pre-sync readings emit `t=0` which Telegraf replaces with arrival time
+  - NaN temperatures serialize as JSON `null` (not `nan`) so Telegraf/Swift/Postgres parsers accept them
   - USB-CDC serial console provisioning (WiFi/MQTT creds via `tools/provision_tag.py`)
+- **TSDB stack** (`combsense-tsdb` LXC, `deploy/tsdb/` for canonical configs)
+  - Telegraf MQTT → Influx pipeline, arrival-time stamped, firmware `t` preserved as `sensor_ts` field
+  - Downsample tasks: 15m cadence into `combsense_1h`, 6h cadence from `_1h` into `combsense_1d`
+  - Daily `influx backup` via systemd timer, 14-day retention on disk
+- **iOS history feature** (in `sjordan0228/combsense`)
+  - `HistoryService` — Flux query client with auto-bucket resolution (raw → 1h → 1d based on range) and CSV parser that accepts both fractional and whole-second RFC3339 timestamps
+  - `HiveHistoryView` — Swift Charts view with 24h/7d/30d/1y range picker, reached via NavigationLink from hive detail
+  - Settings pane extended with Influx URL + org (AppStorage) and read token (Keychain)
 
 ### Not yet built
 - Phase 2: IR bee counter (8-pair beam-break array via CD74HC4067 mux)
-- CombSense iOS app sensor integration (BLE, MQTT, SensorReading model, SensorsTab)
+- CombSense iOS app BLE/MQTT live-reading integration (separate from history)
 - 3D printed enclosures and sensor gate
-- HiveMQ Cloud account setup
+- HiveMQ Cloud account setup (local Mosquitto covers home yard; cellular remote still ahead)
 
 **Related repos:**
 - `sjordan0228/combsense` — iOS app (SwiftUI + SwiftData)
-- `sjordan0228/combsense-monitor` — this repo (hardware + firmware)
+- `sjordan0228/combsense-monitor` — this repo (hardware + firmware + TSDB configs)
 
 ## Routing Table
 
@@ -74,16 +86,18 @@ Read this file fully before doing anything else in this session.
 | Understanding the hardware design | `README.md` (the full datasheet) |
 | Working on ESP32 firmware | `firmware/hive-node/` directory |
 | Working on collector firmware | `firmware/collector/` directory |
-| Shared firmware headers | `firmware/shared/` directory |
-| Making a design decision | `context/decisions.md` |
-| Writing or reviewing code | `context/conventions.md` |
 | Working on home-yard WiFi variant | `firmware/sensor-tag-wifi/` directory |
+| Shared firmware headers | `firmware/shared/` directory |
+| Making a design decision | `.mex/context/decisions.md` |
+| Writing or reviewing code | `.mex/context/conventions.md` |
+| TSDB / Influx / Telegraf / downsampling | `deploy/tsdb/` + Infrastructure section above |
+| iOS history feature | `sjordan0228/combsense` repo (separate session) |
 
 ## Behavioural Contract
 
 For every task, follow this loop:
 
 1. **CONTEXT** — Load the relevant context file(s) from the routing table above.
-2. **BUILD** — Do the work.
+2. **BUILD** — Do the work on `dev` (not `main`). Feature branches off `dev`.
 3. **VERIFY** — Build and test.
-4. **GROW** — Update context files if anything changed.
+4. **GROW** — Update context files (this file, `decisions.md`, `conventions.md`) when anything architectural or operational changes. Not just ROUTER — the underlying files too.

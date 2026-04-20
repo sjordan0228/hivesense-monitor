@@ -1,7 +1,7 @@
 ---
 name: decisions
 description: Architectural decisions and their rationale
-last_updated: 2026-04-11
+last_updated: 2026-04-20
 ---
 
 # Decisions
@@ -65,3 +65,43 @@ last_updated: 2026-04-11
 ## Multiplexer for IR array
 **Decision:** Use 2× CD74HC4067 multiplexers for 8 IR pairs instead of direct GPIO.
 **Why:** Saves 10 GPIO pins (20 → 10). Enables pulsed operation for power savings. $1/chip. Channels 8-15 available for future expansion to 16 pairs.
+
+## InfluxDB 2.x over Timescale / plain Postgres
+**Decision:** Use InfluxDB 2.8 OSS (native Debian 12 LXC, no Docker) as the history TSDB, with Telegraf as the ingest side and Grafana for house dashboards.
+**Why:** First-class time-series semantics (buckets with per-bucket retention, task-scheduled Flux downsampling, HTTP `/api/v2/query` with CSV output that iOS can parse without a server-side shim). Timescale would need a separate API shim for the iOS client. Native packages fit the LXC-per-service philosophy — Docker on Proxmox NFS has storage and networking footguns we don't want.
+
+## Three-bucket retention + downsample tasks (not continuous queries on one bucket)
+**Decision:** Three physical buckets — `combsense` (raw, 30d), `combsense_1h` (365d), `combsense_1d` (∞) — populated by two Flux tasks.
+**Why:** Per-bucket retention is enforced by Influx itself; we don't have to delete raw data manually. Tasks run independently, so a 1d task failure doesn't block raw ingest. Raw bucket disk footprint stays bounded at ~50 hives × 1 sample / 5 min × 30 days. 1-day bucket at ∞ retention costs almost nothing.
+
+## No measurement rename in downsample tasks
+**Decision:** Downsample tasks keep `_measurement = "sensor_reading"` in the target bucket — they do NOT rename to `sensor_reading_1h` / `sensor_reading_1d`.
+**Why:** The iOS `HistoryService` Flux query hardcodes `r._measurement == "sensor_reading"` and switches buckets based on range. Renaming would force the app to know per-bucket measurement names, which leaks downsampling as an implementation detail into the client. Tried once with renames — all queries against downsampled buckets returned empty; debugged, reverted. The bucket IS the granularity signal.
+
+## Flux literal durations over `-task.every * N`
+**Decision:** Downsample task `range(start:)` uses literal durations (`-30m`, `-12h`) rather than computed expressions.
+**Why:** Newer Flux (Influx 2.8+) rejects `duration * int` with "duration is not Divisible". Literal durations are also clearer about what window the task actually looks back at. Pay the cost of keeping `range` in sync with `task.every` manually — tasks change rarely.
+
+## Single-broker Mosquitto (no per-yard brokers)
+**Decision:** All MQTT traffic flows through one Mosquitto at 192.168.1.82. Per-yard brokers added only if/when cellular yards come online.
+**Why:** One subscribe pattern in Telegraf (`combsense/hive/+/reading`) covers every sensor. Splitting brokers prematurely would duplicate Telegraf stanzas, token inventory, and ACL config for no benefit at current scale. Re-evaluate when the first remote yard lands.
+
+## Three-token Influx auth (admin / telegraf-write / ios-read)
+**Decision:** Three distinct tokens with least-privilege scopes. Admin token only used for setup and backup. Telegraf gets a write-only token scoped to the `combsense` bucket. iOS gets a read-only token for the whole org.
+**Why:** The iOS token goes into a phone's Keychain — it must not be able to write. The Telegraf token lives on disk in config — it must not be able to read (or mint new tokens). Admin never leaves `/root/.combsense-tsdb-creds` on the LXC. Rotating any one doesn't require touching the others.
+
+## Arrival-time stamping with firmware `t` preserved as field
+**Decision:** Telegraf does NOT use firmware's `t` as the Influx timestamp. Points land at Telegraf arrival time. Firmware's `t` is stored as a queryable integer field (`sensor_ts`).
+**Why:** Firmware emits `t=0` before its first NTP sync. Mapping `t=0` → epoch 1970 broke retention policy bounds (points rejected with 422). Alternative was a Telegraf starlark processor mapping `t==0` → `time.time()`; keeping arrival time is simpler and still correct for graphing. The `sensor_ts` field is there for forensic alignment when we drain offline-buffered readings — we can measure and bound the sense-to-record drift without it affecting the primary timeline.
+
+## NTP sync in `drainBuffer()`, not `setup()`
+**Decision:** Sensor-tag-wifi firmware calls `WifiManager::getUnixTime()` inside `drainBuffer()`, not on every wake's `setup()`. System clock persists across deep sleep via RTC.
+**Why:** NTP requires WiFi. WiFi is already up during drain cycles (every N samples). Running NTP on every wake would require bringing WiFi up even on sample-only wakes, burning power. Samples taken before the first successful drain are tagged `t=0` and backfilled by the arrival-time stamping on the backend.
+
+## Unprivileged LXC + sandboxing override drop-ins (no privileged containers)
+**Decision:** `combsense-tsdb` runs as an unprivileged Proxmox LXC with per-service systemd drop-ins that permissively override sandboxing directives.
+**Why:** Privileged containers have broader security implications than we want for an always-on home-infra box. Debian 12's stock systemd units ship with `PrivateMounts=true`, `ProtectSystem=strict`, etc., which can't be satisfied in the container's restricted user namespace — services fail with `226/NAMESPACE`. Drop-ins at `/etc/systemd/system/<svc>.service.d/override.conf` set each directive to its permissive value. Applied to `grafana-server` and `telegraf`; `systemd-logind` is masked outright since the box has no interactive tty logins.
+
+## Branch workflow: dev → main via PR (no direct commits to main)
+**Decision:** All work on `dev` (or feature branches off `dev`). Merge to `main` through PRs. User vocabulary: "prod" = `main`.
+**Why:** Matches the iOS repo's existing split. `main` should always reflect what's deployed; in-progress work belongs somewhere it can be abandoned or force-pushed without touching the deployment baseline.
