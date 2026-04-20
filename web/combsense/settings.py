@@ -105,7 +105,11 @@ LOGOUT_REDIRECT_URL = "accounts:login"
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 14  # 14 days
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 
-# Email — console backend in dev; SMTP configured via env in deploy (Plan D)
+# Email backend — defaults to console (stdout) for dev.
+# WARNING: if DJANGO_EMAIL_BACKEND is unset in production, password reset
+# emails will silently print to gunicorn stdout instead of being sent.
+# Operators MUST set DJANGO_EMAIL_BACKEND to an SMTP backend in the deploy env.
+# Plan D configures the prod SMTP backend.
 EMAIL_BACKEND = os.environ.get(
     "DJANGO_EMAIL_BACKEND",
     "django.core.mail.backends.console.EmailBackend",
