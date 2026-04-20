@@ -113,6 +113,23 @@ LOGOUT_REDIRECT_URL = "accounts:login"
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 14  # 14 days
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 
+# --- Reverse-proxy / HTTPS awareness (Plan D) ---
+# nginx terminates TLS; tell Django to trust the X-Forwarded-Proto header.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Only send session + CSRF cookies over HTTPS in prod. Off by default so local
+# `manage.py runserver` (HTTP) keeps working; prod env sets DJANGO_SECURE_COOKIES=1.
+SESSION_COOKIE_SECURE = env_bool("DJANGO_SECURE_COOKIES", default=False)
+CSRF_COOKIE_SECURE    = env_bool("DJANGO_SECURE_COOKIES", default=False)
+
+# CSRF needs to know which origins it should accept POSTs from when behind a
+# proxy. Comma-separated env var, e.g. https://dashboard.combsense.com,https://192.168.1.61
+CSRF_TRUSTED_ORIGINS = [
+    o.strip()
+    for o in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")
+    if o.strip()
+]
+
 # Email backend — defaults to console (stdout) for dev.
 # WARNING: if DJANGO_EMAIL_BACKEND is unset in production, password reset
 # emails will silently print to gunicorn stdout instead of being sent.
