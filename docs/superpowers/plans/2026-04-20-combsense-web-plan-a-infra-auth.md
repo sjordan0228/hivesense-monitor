@@ -6,7 +6,7 @@
 
 **Architecture:** New Proxmox LXC (`combsense-web`) running Debian 12 unprivileged. Django project in this repo under `web/`, Postgres 16 and Redis on the LXC, dev workflow uses local Postgres so you can iterate on a Mac. Auth uses a custom `User` model (`accounts.User`) subclassing `AbstractUser` with email as `USERNAME_FIELD` and a `role` field (`admin` / `beekeeper`).
 
-**Tech Stack:** Debian 12 (LXC), Python 3.11, Django 5.0 LTS, Postgres 16, Redis 7, gunicorn 21, paho-mqtt (later plan), pytest-django 4.8, python-dotenv.
+**Tech Stack:** Debian 12 (LXC), Python 3.11, Django 5.2 LTS, Postgres 15 (Debian 12 default), Redis 7, gunicorn 21, paho-mqtt (later plan), pytest-django 4.8, python-dotenv.
 
 **Reference spec:** [docs/superpowers/specs/2026-04-20-combsense-web-dashboard-design.md](../specs/2026-04-20-combsense-web-dashboard-design.md)
 
@@ -79,12 +79,12 @@
 From the Proxmox host shell (replace `<CTID>` with next free container ID, e.g. `125`):
 
 ```bash
-pct create <CTID> local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst \
+pct create <CTID> local:vztmpl/debian-12-standard_12.12-1_amd64.tar.zst \
   --hostname combsense-web \
   --cores 2 \
   --memory 4096 \
   --swap 1024 \
-  --rootfs local-lvm:20 \
+  --rootfs NFS:20 \
   --net0 name=eth0,bridge=vmbr0,ip=dhcp \
   --unprivileged 1 \
   --features nesting=1 \
@@ -122,7 +122,7 @@ chmod 750 /etc/combsense-web
 - [ ] **Step 1.4: Install Postgres 16**
 
 ```bash
-apt -y install postgresql-16
+apt -y install postgresql-15
 systemctl enable --now postgresql
 sudo -u postgres createuser --pwprompt combsense        # set and record password
 sudo -u postgres createdb --owner=combsense combsense
