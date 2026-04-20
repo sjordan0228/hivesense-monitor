@@ -40,3 +40,14 @@ def test_logout_redirects_to_login(client, existing_user):
     response = client.post(reverse("accounts:logout"))
     assert response.status_code == 302
     assert response.url == reverse("accounts:login")
+
+
+def test_login_redirects_to_next_after_success(client, django_user_model):
+    django_user_model.objects.create_user(email="bob@example.com", password="pw12345678")
+    target = "/some-protected/"
+    response = client.post(
+        f"/accounts/login/?next={target}",
+        {"username": "bob@example.com", "password": "pw12345678", "next": target},
+    )
+    assert response.status_code == 302
+    assert response.url == target

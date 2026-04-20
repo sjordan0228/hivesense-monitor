@@ -7,7 +7,7 @@ Wants=network-online.target
 Type=notify
 User=combsense
 Group=combsense
-WorkingDirectory=/opt/combsense-web
+WorkingDirectory=/opt/combsense-web/web
 EnvironmentFile=/etc/combsense-web/env
 ExecStart=/opt/combsense-web/.venv/bin/gunicorn \
   --bind 127.0.0.1:8000 \

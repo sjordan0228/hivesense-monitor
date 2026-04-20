@@ -34,8 +34,6 @@ sudo -u "${APP_USER}" "${VENV_DIR}/bin/pip" install -r "${CHECKOUT_DIR}/web/requ
 
 # Link the web source directly so manage.py / wsgi work
 ln -snf "${CHECKOUT_DIR}/web" "${INSTALL_DIR}/web"
-ln -snf "${INSTALL_DIR}/web/manage.py" "${INSTALL_DIR}/manage.py"
-ln -snf "${INSTALL_DIR}/web/combsense" "${INSTALL_DIR}/combsense"
 
 # Ensure /etc/combsense-web/env exists — operator must fill in
 if [ ! -f /etc/combsense-web/env ]; then
@@ -44,7 +42,7 @@ if [ ! -f /etc/combsense-web/env ]; then
 fi
 
 # Django migrate + collectstatic
-cd "${INSTALL_DIR}"
+cd "${INSTALL_DIR}/web"
 sudo -u "${APP_USER}" env --file /etc/combsense-web/env \
   "${VENV_DIR}/bin/python" manage.py migrate --noinput
 
