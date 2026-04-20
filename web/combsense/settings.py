@@ -30,6 +30,14 @@ def _parse_dsn(dsn: str) -> dict:
     }
 
 
+def env_bool(key: str, default: bool = False) -> bool:
+    """Read an env var as a boolean. Truthy: 1/true/yes (case-insensitive)."""
+    raw = os.environ.get(key)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes")
+
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
