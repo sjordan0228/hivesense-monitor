@@ -1,7 +1,7 @@
 ---
 name: router
 description: Session bootstrap and navigation hub. Read at the start of every session before any task.
-last_updated: 2026-04-20 (combsense-web Plan A complete: auth + deploy artifacts for combsense-web LXC at 192.168.1.61)
+last_updated: 2026-04-20 (combsense-web Plan D live: nginx TLS reverse proxy deployed to LXC 125, all smoke tests green)
 ---
 
 ## Infrastructure
@@ -75,6 +75,13 @@ Read this file fully before doing anything else in this session.
   - `HiveHistoryView` — Swift Charts view with 24h/7d/30d/1y range picker, reached via NavigationLink from hive detail
   - Settings pane extended with Influx URL + org (AppStorage) and read token (Keychain)
 
+- **combsense-web Plan D live** (`web/`, `deploy/web/`, `combsense-web` LXC, nginx TLS reverse proxy on 192.168.1.61)
+  - nginx 1.22 terminates TLS on :443 with self-signed cert at `/etc/ssl/combsense/`
+  - :80 redirects to HTTPS; ACME challenge passthrough at `/.well-known/acme-challenge/`
+  - gunicorn on 127.0.0.1:8000 behind nginx proxy; static files served directly by nginx
+  - env has `DJANGO_SECURE_COOKIES=1`, `DJANGO_CSRF_TRUSTED_ORIGINS`, `DJANGO_DEBUG=0`
+  - provision.sh requires `BRANCH=dev` until Plan D merges to main
+  - Phase 2: swap to Let's Encrypt cert via certbot, uncomment HSTS header
 - **combsense-web Plan A complete** (`web/`, `deploy/web/`, `combsense-web` LXC)
   - `web/combsense/` project package: env-driven `settings.py`, `urls.py` routes admin + accounts + core
   - `web/accounts/`: custom User model (email login, `role` field), `EmailAuthenticationForm`, `CombSenseLoginView`, `CombSenseLogoutView` (POST-only), `accounts:login` / `accounts:logout` / 4 password-reset URLs namespaced
@@ -82,8 +89,8 @@ Read this file fully before doing anything else in this session.
   - `web/core/`: `core:home` template-rendered view (login_required) with logout form + conditional admin link
   - `web/templates/`: `base.html` shell, `registration/login.html`, password-reset templates; `core/templates/core/home.html`
   - `web/requirements.txt` (Django 5.2.13 LTS — upgraded from 5.0.9 to fix Python 3.14 context copy regression)
-  - **Tests:** 18 passing across `accounts` and `core` (8 model, 4 auth view, 3 password reset, 3 home view)
-  - **Deploy artifacts** (`deploy/web/`): `combsense-web.service` (gunicorn systemd unit), `combsense-web.service.d/override.conf` (unprivileged LXC sandboxing workaround), `env.template`, `provision.sh` (idempotent bootstrap via `env --file`), `README.md` (operator runbook)
+  - **Tests:** 19 passing across `accounts` and `core` (8 model, 5 auth view, 3 password reset, 3 home view)
+  - **Deploy artifacts** (`deploy/web/`): `combsense-web.service` (gunicorn systemd unit, `WorkingDirectory=/opt/combsense-web/web`), `combsense-web.service.d/override.conf` (unprivileged LXC sandboxing workaround), `env.template`, `provision.sh` (idempotent bootstrap via `env --file`; runs migrate/collectstatic from `${INSTALL_DIR}/web`), `README.md` (operator runbook)
   - `web/.venv/` (Python 3.14 locally; LXC runs Python 3.11; not committed); `web/.env` (not committed)
 
 ### Not yet built
