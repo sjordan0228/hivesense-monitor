@@ -1,7 +1,7 @@
 ---
 name: router
 description: Session bootstrap and navigation hub. Read at the start of every session before any task.
-last_updated: 2026-04-19
+last_updated: 2026-04-19 (sensor-tag-wifi bench bring-up complete)
 ---
 
 # Session Bootstrap
@@ -10,7 +10,7 @@ Read this file fully before doing anything else in this session.
 
 ## Current Project State
 
-**Phase: All Three Firmwares Complete — Awaiting Hardware**
+**Phase: sensor-tag-wifi bench-validated on DS18B20 — hive-node + collector awaiting hardware**
 
 ### Completed
 - Hardware datasheet and design spec (README.md)
@@ -42,6 +42,8 @@ Read this file fully before doing anything else in this session.
   - BSSID caching in RTC for fast reconnect
   - 18650 + solar powered, 5-min sample cadence by default
   - Native Unity tests for payload serialization
+  - Bench-validated with DS18B20: end-to-end publish to Mosquitto at 192.168.1.82 works
+  - USB-CDC serial console provisioning (WiFi/MQTT creds via `tools/provision_tag.py`)
 
 ### Not yet built
 - Phase 2: IR bee counter (8-pair beam-break array via CD74HC4067 mux)
