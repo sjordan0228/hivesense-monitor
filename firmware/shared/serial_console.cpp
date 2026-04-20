@@ -258,7 +258,8 @@ void runConsole() {
 namespace SerialConsole {
 
 void checkForConsole() {
-    Serial.println("[CONSOLE] Press any key within 3s to enter provisioning console...");
+    Serial.printf("[CONSOLE] Press any key within %us to enter provisioning console...\n",
+                  CONSOLE_WAIT_MS / 1000);
 
     uint32_t start = millis();
     while (millis() - start < CONSOLE_WAIT_MS) {

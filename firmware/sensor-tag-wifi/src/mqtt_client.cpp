@@ -74,7 +74,8 @@ bool publish(const char* deviceId, const Reading& r) {
     // QoS 0 publishes land in the TCP write buffer and return true before the
     // broker has actually received them. WiFiClient::flush() on Arduino-ESP32
     // checks RX, not TX — so give TCP real wall-clock time to push the bytes
-    // out before the caller tears down WiFi.
+    // out before the caller tears down WiFi. 1s total is empirically what the
+    // bench node needs; PubSubClient exposes no TX-empty signal to key off of.
     for (int i = 0; i < 20; i++) {
         pubsub.loop();
         delay(50);
