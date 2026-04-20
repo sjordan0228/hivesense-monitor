@@ -1,7 +1,7 @@
 ---
 name: router
 description: Session bootstrap and navigation hub. Read at the start of every session before any task.
-last_updated: 2026-04-11
+last_updated: 2026-04-19
 ---
 
 # Session Bootstrap
@@ -36,6 +36,12 @@ Read this file fully before doing anything else in this session.
   - BLE advertisement with temp/humidity from SHT31
   - Deep sleep cycle (60s interval), CR2032 powered
   - Build: 38% flash (1.2 MB of 3.0 MB)
+- Sensor tag WiFi variant (`firmware/sensor-tag-wifi/`) — XIAO ESP32-C6 for home-yard deployments
+  - Compile-time sensor abstraction (SHT31 dual / DS18B20 dual)
+  - Direct MQTT to local Mosquitto, RTC ring buffer for offline resilience
+  - BSSID caching in RTC for fast reconnect
+  - 18650 + solar powered, 5-min sample cadence by default
+  - Native Unity tests for payload serialization
 
 ### Not yet built
 - Phase 2: IR bee counter (8-pair beam-break array via CD74HC4067 mux)
@@ -57,6 +63,7 @@ Read this file fully before doing anything else in this session.
 | Shared firmware headers | `firmware/shared/` directory |
 | Making a design decision | `context/decisions.md` |
 | Writing or reviewing code | `context/conventions.md` |
+| Working on home-yard WiFi variant | `firmware/sensor-tag-wifi/` directory |
 
 ## Behavioural Contract
 

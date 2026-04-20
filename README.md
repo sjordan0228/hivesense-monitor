@@ -500,6 +500,21 @@ Service UUID: 0xHVSN (custom)
     └── uint8_t — write 0x01 to clear after sync
 ```
 
+### 7.5 Sensor Tag — WiFi Variant (home yards)
+
+For beekeepers with hives in WiFi range of their home network, `firmware/sensor-tag-wifi/` is a fork of the BLE tag that publishes directly to a local Mosquitto broker over MQTT — no collector required.
+
+**Hardware:** XIAO ESP32-C6 + 2× DS18B20 (or SHT31 pair) + 18650 Li-ion + 100 mAh solar panel + TP4056/DW01 charger
+**Power:** 5-min sample cadence, solar-maintained — runs indefinitely with daylight
+**Transport:** WiFi → MQTT → Mosquitto at the local IP
+**Topic:** `combsense/hive/<device-id>/reading`
+**Payload:** JSON — `{"id":"ab12cd34","t":1712345678,"t1":22.4,"t2":24.1,"h1":52.3,"h2":55.1,"b":87}`
+**Build variants:**
+- `pio run -e xiao-c6-sht31` — dual SHT31 (temp + humidity, brood + top)
+- `pio run -e xiao-c6-ds18b20` — dual DS18B20 (temp only, brood + top)
+
+**Provisioning:** connect to serial @115200 during boot window. Set `wifi_ssid`, `wifi_pass`, `mqtt_host`, `mqtt_port`, `mqtt_user`, `mqtt_pass`. Optional: `sample_int` (seconds), `upload_every` (samples).
+
 ---
 
 ## 8. CombSense iOS App Integration Spec

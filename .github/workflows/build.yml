@@ -75,3 +75,57 @@ jobs:
 
       - name: Build sensor-tag firmware
         run: cd firmware/sensor-tag && pio run
+
+  build-sensor-tag-wifi-sht31:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio
+          key: pio-tagwifi-${{ hashFiles('firmware/sensor-tag-wifi/platformio.ini') }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PlatformIO
+        run: pip install platformio
+      - name: Build sensor-tag-wifi (SHT31)
+        run: cd firmware/sensor-tag-wifi && pio run -e xiao-c6-sht31
+
+  build-sensor-tag-wifi-ds18b20:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio
+          key: pio-tagwifi-${{ hashFiles('firmware/sensor-tag-wifi/platformio.ini') }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PlatformIO
+        run: pip install platformio
+      - name: Build sensor-tag-wifi (DS18B20)
+        run: cd firmware/sensor-tag-wifi && pio run -e xiao-c6-ds18b20
+
+  test-sensor-tag-wifi-native:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio
+          key: pio-tagwifi-native-${{ hashFiles('firmware/sensor-tag-wifi/platformio.ini') }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PlatformIO
+        run: pip install platformio
+      - name: Run native payload tests
+        run: cd firmware/sensor-tag-wifi && pio test -e native
