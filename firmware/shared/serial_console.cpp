@@ -8,7 +8,7 @@
 namespace {
 
 constexpr const char* NVS_NS = "combsense";
-constexpr uint16_t CONSOLE_WAIT_MS = 3000;
+constexpr uint16_t CONSOLE_WAIT_MS = 10000;
 
 const char* knownKeys[] = {
     "hive_id", "collector_mac", "day_start", "day_end", "read_interval",
@@ -158,7 +158,22 @@ bool handleCommand(Preferences& prefs, const char* line) {
 
             if (isNumeric) {
                 long num = atol(value);
-                if (num <= 255) {
+                // Known keys must be stored as the type the firmware reads
+                // them back with. Pure magnitude-based detection would store
+                // e.g. sample_int=30 as uint8, but main.cpp calls getUShort
+                // and gets the default back on type mismatch.
+                const bool isU16 =
+                    strcmp(key, "mqtt_port")  == 0 ||
+                    strcmp(key, "sample_int") == 0;
+
+                if (isU16) {
+                    if (num < 0 || num > 65535) {
+                        Serial.printf("  %s: value out of range for uint16\n", key);
+                    } else {
+                        prefs.putUShort(key, static_cast<uint16_t>(num));
+                        Serial.printf("  %s = %u (uint16)\n", key, static_cast<uint16_t>(num));
+                    }
+                } else if (num <= 255) {
                     prefs.putUChar(key, static_cast<uint8_t>(num));
                     Serial.printf("  %s = %u (uint8)\n", key, static_cast<uint8_t>(num));
                 } else if (num <= 65535) {
@@ -254,6 +269,10 @@ void checkForConsole() {
         }
         delay(10);
     }
+}
+
+void runBlocking() {
+    runConsole();
 }
 
 }  // namespace SerialConsole

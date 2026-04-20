@@ -110,7 +110,11 @@ void sampleAndEnqueue() {
 
 void setup() {
     Serial.begin(115200);
-    delay(500);
+    // Give USB-CDC on the C6 time to enumerate on the host before printing.
+    // Without this, the first ~1s of prints are lost because the host hasn't
+    // finished CDC setup yet, and we race the provisioning console window.
+    Serial.setTxTimeoutMs(0);
+    delay(2000);
 
     initDeviceId();
     Serial.printf("[MAIN] combsense sensor-tag-wifi id=%s\n", deviceId);
@@ -120,9 +124,17 @@ void setup() {
     // Ensure NVS namespace exists for first boot
     Preferences prefs;
     prefs.begin(NVS_NAMESPACE, false);
+    const bool hasSsid = prefs.getString(NVS_KEY_WIFI_SSID, "").length() > 0;
     prefs.end();
 
-    SerialConsole::checkForConsole();
+    if (!hasSsid) {
+        // First boot (or wiped NVS) — the 3s keypress window races host-side
+        // USB-CDC enumeration, so force-enter the console until provisioned.
+        Serial.println("[MAIN] no wifi_ssid configured — entering console");
+        SerialConsole::runBlocking();
+    } else {
+        SerialConsole::checkForConsole();
+    }
 
     Config cfg = loadConfig();
     Serial.printf("[MAIN] sample_int=%lus upload_every=%u\n",

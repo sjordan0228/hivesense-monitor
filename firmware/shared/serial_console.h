@@ -8,4 +8,7 @@ namespace SerialConsole {
     /// Check for serial input. Enters console mode if key detected.
     void checkForConsole();
 
+    /// Enter console mode unconditionally and block until 'exit' or 'reboot'.
+    void runBlocking();
+
 }  // namespace SerialConsole
