@@ -1,7 +1,7 @@
 ---
 name: router
 description: Session bootstrap and navigation hub. Read at the start of every session before any task.
-last_updated: 2026-04-20 (combsense-web Plan D live: nginx TLS reverse proxy deployed to LXC 125, all smoke tests green)
+last_updated: 2026-04-24 (Grafana home-yard dashboard provisioned and tracked in repo; tools/provision_tag.py committed)
 ---
 
 ## Infrastructure
@@ -12,7 +12,7 @@ last_updated: 2026-04-20 (combsense-web Plan D live: nginx TLS reverse proxy dep
     - Buckets: `combsense` (raw, 30d) / `combsense_1h` (hourly, 365d) / `combsense_1d` (daily, ∞)
     - Measurement: `sensor_reading`. Tag: `sensor_id`. Fields: `t1`, `t2`, `b`, `sensor_ts`.
     - Downsample tasks live in Influx metadata; canonical copies in `deploy/tsdb/downsample-*.flux`
-  - **Grafana 13** on `:3000`
+  - **Grafana 13** on `:3000` — `combsense-home-yard` dashboard provisioned (temp °F, battery, last-seen); JSON canonical at `deploy/tsdb/grafana/home-yard-sensors.json`
   - **Telegraf** — MQTT consumer `combsense/hive/+/reading` → Influx; config mirrored at `deploy/tsdb/telegraf-combsense.conf`
   - Tokens at `/root/.combsense-tsdb-creds` (mode 600): `admin_token`, `telegraf_write_token`, `ios_read_token`
   - Systemd sandboxing drop-ins at `/etc/systemd/system/{grafana-server,telegraf}.service.d/override.conf` (required for unprivileged LXC — see memory)
