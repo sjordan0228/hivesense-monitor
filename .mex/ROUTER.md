@@ -1,7 +1,7 @@
 ---
 name: router
 description: Session bootstrap and navigation hub. Read at the start of every session before any task.
-last_updated: 2026-04-25 (sensor-tag-wifi HTTP-pull OTA shipped — manifest+sha256 over LAN nginx; pending hardware smoke tests)
+last_updated: 2026-04-25 (sensor-tag-wifi HTTP-pull OTA happy-path validated end-to-end on c5fffe12; tag deployed to yard on 5423c04)
 ---
 
 ## Infrastructure
@@ -67,7 +67,10 @@ Read this file fully before doing anything else in this session.
   - Epoch timestamps via NTP sync in `drainBuffer()` — persists across deep sleep via RTC; pre-sync readings emit `t=0` which Telegraf replaces with arrival time
   - NaN temperatures serialize as JSON `null` (not `nan`) so Telegraf/Swift/Postgres parsers accept them
   - USB-CDC serial console provisioning (WiFi/MQTT/OTA creds via `tools/provision_tag.py --ota-host ...`)
-  - HTTP-pull OTA on wake (manifest at `http://192.168.1.61/firmware/sensor-tag-wifi/<variant>/manifest.json`, sha256-verified, dual 1.5 MB OTA slots, bootloader auto-rollback if first publish after flash fails). Publish via `deploy/web/publish-firmware.sh <sht31|ds18b20>`. nginx LAN-only allowlist on combsense-web LXC.
+  - HTTP-pull OTA on wake (manifest at `http://192.168.1.61/firmware/sensor-tag-wifi/<variant>/manifest.json`, sha256-verified, dual 1.5 MB OTA slots, bootloader auto-rollback if first publish after flash fails). Publish via `deploy/web/publish-firmware.sh <sht31|ds18b20|s3-ds18b20>`. nginx LAN-only allowlist on combsense-web LXC.
+  - **Hardware variants:** Seeed XIAO ESP32-C6 (default; envs `xiao-c6-sht31`, `xiao-c6-ds18b20`) and Waveshare ESP32-S3-Zero (env `waveshare-s3zero-ds18b20`, OTA variant `s3-ds18b20`). Pin map differs (S3: OneWire→GPIO4, batt ADC→GPIO1) via build-flag overrides in `include/config.h`. S3 board flagged as `esp32-s3-devkitc-1` because `waveshare_esp32_s3_zero` is not in the pioarduino board index. C6 yard tag unaffected by S3 work.
+  - **OTA transport:** raw `WiFiClient` + `IPAddress::fromString` for OTA fetches — bypasses `esp_http_client` / `esp-tls` / `getaddrinfo`, which on the C6 routes through OpenThread DNS64 and fails (EAI_FAIL/202) for IPv4 literals. PubSubClient uses the same WiFiClient transport. WiFi window is held across upload + OTA (was: connect → publish → disconnect → check; now: connect → publish → check → disconnect).
+  - **Validated 2026-04-25:** tag c5fffe12 OTA'd a720183 → 5423c04 end-to-end (download 1,056,480 B, sha256 verified, reboot, new fw published over MQTT, sleep 300s). Tag deployed to yard. Tasks 15b–15e (sha-mismatch / auto-rollback / low-battery skip / failed-version pin) still need bench validation.
 - **TSDB stack** (`combsense-tsdb` LXC, `deploy/tsdb/` for canonical configs)
   - Telegraf MQTT → Influx pipeline, arrival-time stamped, firmware `t` preserved as `sensor_ts` field
   - Downsample tasks: 15m cadence into `combsense_1h`, 6h cadence from `_1h` into `combsense_1d`
@@ -115,6 +118,7 @@ Read this file fully before doing anything else in this session.
 | Working on collector firmware | `firmware/collector/` directory |
 | Working on home-yard WiFi variant | `firmware/sensor-tag-wifi/` directory |
 | Sensor-tag-wifi OTA | `firmware/sensor-tag-wifi/src/ota*.cpp` + `deploy/web/publish-firmware.sh` |
+| Sensor-tag-wifi pin map / variants | `firmware/sensor-tag-wifi/include/config.h` + `platformio.ini` build_flags |
 | Shared firmware headers | `firmware/shared/` directory |
 | Making a design decision | `.mex/context/decisions.md` |
 | Writing or reviewing code | `.mex/context/conventions.md` |
