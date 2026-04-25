@@ -69,3 +69,12 @@ constexpr uint8_t  DS18B20_RESOLUTION_BITS      = 12;
 // =============================================================================
 
 constexpr size_t PAYLOAD_MAX_LEN = 160;
+
+// =============================================================================
+// OTA
+// =============================================================================
+
+constexpr const char* OTA_DEFAULT_HOST     = "192.168.1.61";
+constexpr uint8_t     OTA_BATTERY_FLOOR_PCT = 20;
+constexpr uint32_t    OTA_HTTP_TIMEOUT_MS  = 30000;
+constexpr const char* NVS_KEY_OTA_HOST     = "ota_host";
