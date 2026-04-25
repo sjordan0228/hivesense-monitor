@@ -177,7 +177,7 @@ void checkAndApply(uint8_t batteryPct) {
     char body[1024];
     int len = 0;
     if (!fetchManifestText(manifestUrl, body, sizeof(body), len)) {
-        Serial.println("[OTA] manifest fetch failed");
+        Serial.printf("[OTA] manifest fetch failed url=%s\n", manifestUrl);
         return;
     }
 
