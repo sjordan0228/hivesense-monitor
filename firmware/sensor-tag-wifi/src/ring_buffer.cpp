@@ -13,7 +13,7 @@ RTC_DATA_ATTR uint8_t  rtcHead  = 0;    // write index
 RTC_DATA_ATTR uint8_t  rtcCount = 0;
 RTC_DATA_ATTR Reading  rtcBuf[RTC_BUFFER_CAPACITY];
 
-constexpr uint32_t MAGIC = 0xCB50A001u;  // "CombSense Tag Wi-Fi"
+constexpr uint32_t MAGIC = 0xCB50A002u;  // bumped 2026-04-25: Reading layout grew vbat_mV — old slots invalid
 
 }  // anonymous namespace
 

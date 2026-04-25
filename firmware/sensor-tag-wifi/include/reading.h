@@ -21,3 +21,7 @@ struct Reading {
     uint16_t vbat_mV;      // raw battery voltage at sample time
     uint8_t  battery_pct;  // 0..100
 };
+
+static_assert(sizeof(Reading) == 24,
+              "Reading layout changed — bump RingBuffer MAGIC to invalidate "
+              "stale RTC slots after OTA. See ring_buffer.cpp.");
