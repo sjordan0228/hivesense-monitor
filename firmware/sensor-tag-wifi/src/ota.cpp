@@ -72,7 +72,8 @@ bool parseHttpUrl(const char* url, UrlParts& out) {
 
 /// Open a raw HTTP/1.0 GET via WiFiClient. Bypasses esp-tls/getaddrinfo,
 /// which on ESP32-C6 routes through OpenThread DNS64 and fails for IPv4
-/// literals. PubSubClient uses the same WiFiClient path successfully.
+/// literals (EAI_FAIL/202). PubSubClient uses the same WiFiClient path
+/// successfully — this aligns OTA with that proven transport.
 bool openHttpGet(WiFiClient& client, const UrlParts& u) {
     IPAddress ip;
     if (!ip.fromString(u.host)) {
