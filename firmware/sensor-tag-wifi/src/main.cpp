@@ -122,7 +122,8 @@ void setup() {
     delay(2000);
 
     initDeviceId();
-    Serial.printf("[MAIN] combsense sensor-tag-wifi id=%s\n", deviceId);
+    Serial.printf("[MAIN] combsense sensor-tag-wifi id=%s version=%s\n",
+                  deviceId, FIRMWARE_VERSION);
 
     Ota::validateOnBoot();
 
