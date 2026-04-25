@@ -30,6 +30,11 @@ void test_three_quarters_returns_75() {
     TEST_ASSERT_EQUAL_UINT8(75, Battery::percentFromMillivolts(3975));
 }
 
+void test_percent_from_millivolts_truncates_not_rounds() {
+    // (3314 - 3300) * 100.0 / 900 = 1400/900 = 1.555...; floor=1, round-half-up=2
+    TEST_ASSERT_EQUAL_UINT8(1, Battery::percentFromMillivolts(3314));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_full_voltage_returns_100);
@@ -38,5 +43,6 @@ int main(int, char**) {
     RUN_TEST(test_below_empty_clamps_to_0);
     RUN_TEST(test_midpoint_returns_50);
     RUN_TEST(test_three_quarters_returns_75);
+    RUN_TEST(test_percent_from_millivolts_truncates_not_rounds);
     return UNITY_END();
 }
