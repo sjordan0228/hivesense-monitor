@@ -1,7 +1,7 @@
 ---
 name: router
 description: Session bootstrap and navigation hub. Read at the start of every session before any task.
-last_updated: 2026-04-24 (Grafana home-yard dashboard provisioned and tracked in repo; tools/provision_tag.py committed)
+last_updated: 2026-04-24 (OTA manifest JSON parser added to sensor-tag-wifi; 5 native tests passing)
 ---
 
 ## Infrastructure
@@ -63,7 +63,7 @@ Read this file fully before doing anything else in this session.
   - Direct MQTT to local Mosquitto, RTC ring buffer for offline resilience
   - BSSID caching in RTC for fast reconnect
   - 18650 + solar powered, 5-min sample cadence by default
-  - Native Unity tests for payload serialization (6 passing, incl. t=0 case)
+  - Native Unity tests for payload serialization (6 passing, incl. t=0 case) + OTA manifest parser (5 passing)
   - Epoch timestamps via NTP sync in `drainBuffer()` — persists across deep sleep via RTC; pre-sync readings emit `t=0` which Telegraf replaces with arrival time
   - NaN temperatures serialize as JSON `null` (not `nan`) so Telegraf/Swift/Postgres parsers accept them
   - USB-CDC serial console provisioning (WiFi/MQTT creds via `tools/provision_tag.py`)
