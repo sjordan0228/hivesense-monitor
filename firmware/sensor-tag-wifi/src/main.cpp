@@ -12,10 +12,13 @@
 #include "wifi_manager.h"
 #include "mqtt_client.h"
 #include "serial_console.h"
+#include "ota.h"
 
 namespace {
 
 RTC_DATA_ATTR uint16_t rtcSampleCounter = 0;
+
+uint8_t lastBatteryPct = 0;
 
 char deviceId[9] = {0};
 
@@ -69,6 +72,7 @@ void drainBuffer() {
         if (!MqttClient::publish(deviceId, r)) break;
         RingBuffer::popOldest();
         sent++;
+        Ota::onPublishSuccess();
     }
     Serial.printf("[MAIN] sent %u / remaining %u\n", sent, RingBuffer::size());
 
@@ -92,6 +96,7 @@ void sampleAndEnqueue() {
     }
 
     r.battery_pct = Battery::readPercent();
+    lastBatteryPct = r.battery_pct;
 
     // System clock is set by drainBuffer()'s NTP sync and persists across deep
     // sleep. Samples taken before the first successful upload are tagged 0 and
@@ -118,6 +123,8 @@ void setup() {
 
     initDeviceId();
     Serial.printf("[MAIN] combsense sensor-tag-wifi id=%s\n", deviceId);
+
+    Ota::validateOnBoot();
 
     RingBuffer::initIfColdBoot();
 
@@ -149,6 +156,10 @@ void setup() {
     } else {
         Serial.printf("[MAIN] not uploading this cycle (%u/%u)\n",
                       rtcSampleCounter, cfg.uploadEveryN);
+    }
+
+    if (rtcSampleCounter == 0 && lastBatteryPct > 0) {
+        Ota::checkAndApply(lastBatteryPct);
     }
 
     Serial.printf("[MAIN] sleeping %lus\n", (unsigned long)cfg.sampleIntervalSec);
