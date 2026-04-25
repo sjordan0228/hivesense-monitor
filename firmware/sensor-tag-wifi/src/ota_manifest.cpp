@@ -13,7 +13,10 @@ const char* findKey(const char* json, size_t len, const char* key) {
     if (n <= 0 || (size_t)n >= sizeof(needle)) return nullptr;
     const char* end = json + len;
     for (const char* p = json; p + n <= end; p++) {
-        if (memcmp(p, needle, n) == 0) return p + n;
+        if (memcmp(p, needle, n) != 0) continue;
+        const char* after = p + n;
+        while (after < end && isspace((unsigned char)*after)) after++;
+        if (after < end && *after == ':') return p + n;
     }
     return nullptr;
 }

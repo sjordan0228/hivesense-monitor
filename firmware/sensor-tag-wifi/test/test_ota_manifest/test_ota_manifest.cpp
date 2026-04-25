@@ -55,6 +55,48 @@ void test_rejects_wrong_sha_length() {
     TEST_ASSERT_FALSE(parseManifest(j, strlen(j), m));
 }
 
+void test_key_substring_in_url_value_does_not_false_match() {
+    // The URL contains "sha256" as a path segment. The parser must not match
+    // it as the sha256 key — the real key is later in the document.
+    const char* j =
+        "{\"version\":\"v1\","
+        "\"url\":\"http://host/sha256/fw.bin\","
+        "\"sha256\":\"0000000000000000000000000000000000000000000000000000000000000000\","
+        "\"size\":1}";
+    Manifest m {};
+    TEST_ASSERT_TRUE(parseManifest(j, strlen(j), m));
+    TEST_ASSERT_EQUAL_STRING("v1", m.version);
+    TEST_ASSERT_EQUAL_STRING("http://host/sha256/fw.bin", m.url);
+    TEST_ASSERT_EQUAL_STRING(
+        "0000000000000000000000000000000000000000000000000000000000000000", m.sha256);
+}
+
+void test_rejects_truncated_after_first_field() {
+    // findKey hits "version" but extractString fails for url because the
+    // document terminates before the next quoted value.
+    const char* j = "{\"version\":\"v1\"";
+    Manifest m {};
+    TEST_ASSERT_FALSE(parseManifest(j, strlen(j), m));
+}
+
+void test_rejects_colon_with_no_value() {
+    // findKey hits "url" but the value isn't a string literal — exercises
+    // the "*p != '\"'" guard in extractString.
+    const char* j = "{\"version\":\"v1\",\"url\":";
+    Manifest m {};
+    TEST_ASSERT_FALSE(parseManifest(j, strlen(j), m));
+}
+
+void test_rejects_non_numeric_size() {
+    const char* j =
+        "{\"version\":\"v1\","
+        "\"url\":\"http://x/y\","
+        "\"sha256\":\"0000000000000000000000000000000000000000000000000000000000000000\","
+        "\"size\":\"oops\"}";
+    Manifest m {};
+    TEST_ASSERT_FALSE(parseManifest(j, strlen(j), m));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_parses_valid_manifest);
@@ -62,5 +104,9 @@ int main(int, char**) {
     RUN_TEST(test_rejects_malformed_json);
     RUN_TEST(test_rejects_oversize_url);
     RUN_TEST(test_rejects_wrong_sha_length);
+    RUN_TEST(test_key_substring_in_url_value_does_not_false_match);
+    RUN_TEST(test_rejects_truncated_after_first_field);
+    RUN_TEST(test_rejects_colon_with_no_value);
+    RUN_TEST(test_rejects_non_numeric_size);
     return UNITY_END();
 }
