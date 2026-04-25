@@ -1,7 +1,7 @@
 ---
 name: router
 description: Session bootstrap and navigation hub. Read at the start of every session before any task.
-last_updated: 2026-04-25 (sensor-tag-wifi HTTP-pull OTA happy-path validated end-to-end on c5fffe12; tag deployed to yard on 5423c04; Battery::percentFromMillivolts extracted inline + 6 native tests added on ceb0fa4; truncation contract test added → 37 native tests on 0285a16)
+last_updated: 2026-04-25 (sensor-tag-wifi HTTP-pull OTA happy-path validated end-to-end on c5fffe12; tag deployed to yard on 5423c04; Battery::percentFromMillivolts extracted inline + 6 native tests added on ceb0fa4; truncation contract test added → 37 native tests on 0285a16; payload extended with v/vbat_mV/rssi fields → 38 native tests on 7f8d628; RingBuffer MAGIC bumped 0xCB50A001→0xCB50A002 + Reading static_assert added on 31de751)
 ---
 
 ## Infrastructure
@@ -63,9 +63,10 @@ Read this file fully before doing anything else in this session.
   - Direct MQTT to local Mosquitto, RTC ring buffer for offline resilience
   - BSSID caching in RTC for fast reconnect
   - 18650 + solar powered, 5-min sample cadence by default
-  - Native Unity tests: 37 passing across payload (6), OTA manifest parser (9), OTA decision (6), OTA validate-on-boot (4), sha256 streamer (5), battery math (7)
+  - Native Unity tests: 38 passing across payload (7), OTA manifest parser (9), OTA decision (6), OTA validate-on-boot (4), sha256 streamer (5), battery math (7) — Reading static_assert guards sizeof==24
   - Epoch timestamps via NTP sync in `drainBuffer()` — persists across deep sleep via RTC; pre-sync readings emit `t=0` which Telegraf replaces with arrival time
   - NaN temperatures serialize as JSON `null` (not `nan`) so Telegraf/Swift/Postgres parsers accept them
+  - **Payload shape (7f8d628):** JSON now includes `v` (firmware version string), `vbat_mV` (raw ADC mV), `rssi` (dBm, placeholder 0 until Task 4 wires real value). `Reading` struct carries `vbat_mV uint16_t`. `Payload::serialize` signature extended with `fwVersion` and `rssi` params. `mqtt_client.cpp` passes `FIRMWARE_VERSION` macro with `"unknown"` fallback.
   - USB-CDC serial console provisioning (WiFi/MQTT/OTA creds via `tools/provision_tag.py --ota-host ...`)
   - HTTP-pull OTA on wake (manifest at `http://192.168.1.61/firmware/sensor-tag-wifi/<variant>/manifest.json`, sha256-verified, dual 1.5 MB OTA slots, bootloader auto-rollback if first publish after flash fails). Publish via `deploy/web/publish-firmware.sh <sht31|ds18b20|s3-ds18b20>`. nginx LAN-only allowlist on combsense-web LXC.
   - **Hardware variants:** Seeed XIAO ESP32-C6 (default; envs `xiao-c6-sht31`, `xiao-c6-ds18b20`) and Waveshare ESP32-S3-Zero (env `waveshare-s3zero-ds18b20`, OTA variant `s3-ds18b20`). Pin map differs (S3: OneWire→GPIO4, batt ADC→GPIO1) via build-flag overrides in `include/config.h`. S3 board flagged as `esp32-s3-devkitc-1` because `waveshare_esp32_s3_zero` is not in the pioarduino board index. C6 yard tag unaffected by S3 work.
