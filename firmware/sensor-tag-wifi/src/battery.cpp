@@ -23,8 +23,5 @@ uint16_t readMillivolts() {
     return static_cast<uint16_t>(vbat);
 }
 
-uint8_t readPercent() {
-    return percentFromMillivolts(readMillivolts());
-}
 
 }  // namespace Battery

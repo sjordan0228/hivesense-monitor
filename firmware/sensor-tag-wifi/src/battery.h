@@ -23,7 +23,5 @@ inline uint8_t percentFromMillivolts(uint16_t mV) {
         (VBAT_FULL_MV - VBAT_EMPTY_MV));
 }
 
-/// Convenience: composes readMillivolts() + percentFromMillivolts().
-uint8_t readPercent();
 
 }  // namespace Battery

@@ -62,6 +62,8 @@ void uploadAndCheckOta(uint8_t batteryPct) {
 
     if (RingBuffer::size() > 0) {
         if (MqttClient::connect(deviceId)) {
+            // WiFi.RSSI() is int32_t; real-world range -100..-30 dBm fits int8_t.
+            // Captured post-connect so association is confirmed.
             int8_t sessionRssi = static_cast<int8_t>(WiFi.RSSI());
             Serial.printf("[MAIN] mqtt connected rssi=%d dBm\n", sessionRssi);
             uint8_t sent = 0;
