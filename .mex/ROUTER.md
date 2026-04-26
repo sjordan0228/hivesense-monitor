@@ -1,7 +1,7 @@
 ---
 name: router
 description: Session bootstrap and navigation hub. Read at the start of every session before any task.
-last_updated: 2026-04-25 (sensor-tag-wifi HTTP-pull OTA happy-path validated end-to-end on c5fffe12; tag deployed to yard on 5423c04; Battery::percentFromMillivolts extracted inline + 6 native tests added on ceb0fa4; truncation contract test added → 37 native tests on 0285a16; payload extended with v/vbat_mV/rssi fields → 38 native tests on 7f8d628; RingBuffer MAGIC bumped 0xCB50A001→0xCB50A002 + Reading static_assert added on 31de751; vbat_mV wired at sample time + RSSI captured post-connect and forwarded to publish on 12d8fab)
+last_updated: 2026-04-25 (sensor-tag-wifi HTTP-pull OTA happy-path validated end-to-end on c5fffe12; tag deployed to yard on 5423c04; Battery::percentFromMillivolts extracted inline + 6 native tests added on ceb0fa4; truncation contract test added → 37 native tests on 0285a16; payload extended with v/vbat_mV/rssi fields → 38 native tests on 7f8d628; RingBuffer MAGIC bumped 0xCB50A001→0xCB50A002 + Reading static_assert added on 31de751; vbat_mV wired at sample time + RSSI captured post-connect and forwarded to publish on 12d8fab; dead Battery::readPercent dropped + RSSI cast documented on 4fb0541)
 ---
 
 ## Infrastructure
@@ -75,6 +75,7 @@ Read this file fully before doing anything else in this session.
   - **Validated 2026-04-25:** tag c5fffe12 OTA'd a720183 → 5423c04 end-to-end (download 1,056,480 B, sha256 verified, reboot, new fw published over MQTT, sleep 300s). Tag deployed to yard. Tasks 15b–15e (sha-mismatch / auto-rollback / low-battery skip / failed-version pin) still need bench validation.
 - **TSDB stack** (`combsense-tsdb` LXC, `deploy/tsdb/` for canonical configs)
   - Telegraf MQTT → Influx pipeline, arrival-time stamped, firmware `t` preserved as `sensor_ts` field
+  - sensor-tag-wifi fleet-visibility fields parsed (`v`→`fw_version` string, `vbat_mV` int, `rssi` int) — all `optional=true` so older payloads still parse during rollout
   - Downsample tasks: 15m cadence into `combsense_1h`, 6h cadence from `_1h` into `combsense_1d`
   - Daily `influx backup` via systemd timer, 14-day retention on disk
 - **iOS history feature** (in `sjordan0228/combsense`)
