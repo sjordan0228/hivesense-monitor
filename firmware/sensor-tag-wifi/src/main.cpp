@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <Preferences.h>
+#include <WiFi.h>
 #include <esp_mac.h>
 #include <esp_sleep.h>
 
@@ -12,10 +13,13 @@
 #include "wifi_manager.h"
 #include "mqtt_client.h"
 #include "serial_console.h"
+#include "ota.h"
 
 namespace {
 
 RTC_DATA_ATTR uint16_t rtcSampleCounter = 0;
+
+uint8_t lastBatteryPct = 0;
 
 char deviceId[9] = {0};
 
@@ -43,12 +47,12 @@ Config loadConfig() {
     return c;
 }
 
-/// Drain the RTC ring buffer over MQTT. Leaves unsent readings in place.
-void drainBuffer() {
-    if (RingBuffer::size() == 0) return;
-
+/// Drain readings over MQTT and run the OTA check inside a single WiFi window.
+/// OTA must share the radio session with MQTT — a separate connect after
+/// disconnect leaves a window where WiFi.mode(OFF) makes esp_http_client fail.
+void uploadAndCheckOta(uint8_t batteryPct) {
     if (!WifiManager::connect()) {
-        Serial.println("[MAIN] no wifi — keeping buffer");
+        Serial.println("[MAIN] no wifi — keeping buffer, skipping OTA");
         return;
     }
 
@@ -56,23 +60,32 @@ void drainBuffer() {
     // deep sleep once set, so subsequent samples get real timestamps.
     WifiManager::getUnixTime();
 
-    if (!MqttClient::connect(deviceId)) {
-        Serial.println("[MAIN] no mqtt — keeping buffer");
-        WifiManager::disconnect();
-        return;
+    if (RingBuffer::size() > 0) {
+        if (MqttClient::connect(deviceId)) {
+            // WiFi.RSSI() is int32_t; real-world range -100..-30 dBm fits int8_t.
+            // Captured post-connect so association is confirmed.
+            int8_t sessionRssi = static_cast<int8_t>(WiFi.RSSI());
+            Serial.printf("[MAIN] mqtt connected rssi=%d dBm\n", sessionRssi);
+            uint8_t sent = 0;
+            while (RingBuffer::size() > 0) {
+                Reading r;
+                if (!RingBuffer::peekOldest(r)) break;
+                if (!MqttClient::publish(deviceId, r, sessionRssi)) break;
+                RingBuffer::popOldest();
+                sent++;
+                Ota::onPublishSuccess();
+            }
+            Serial.printf("[MAIN] sent %u / remaining %u\n", sent, RingBuffer::size());
+            MqttClient::disconnect();
+        } else {
+            Serial.println("[MAIN] no mqtt — keeping buffer");
+        }
     }
 
-    uint8_t sent = 0;
-    while (RingBuffer::size() > 0) {
-        Reading r;
-        if (!RingBuffer::peekOldest(r)) break;
-        if (!MqttClient::publish(deviceId, r)) break;
-        RingBuffer::popOldest();
-        sent++;
+    if (batteryPct > 0) {
+        Ota::checkAndApply(batteryPct);
     }
-    Serial.printf("[MAIN] sent %u / remaining %u\n", sent, RingBuffer::size());
 
-    MqttClient::disconnect();
     WifiManager::disconnect();
 }
 
@@ -91,7 +104,9 @@ void sampleAndEnqueue() {
         return;
     }
 
-    r.battery_pct = Battery::readPercent();
+    r.vbat_mV     = Battery::readMillivolts();
+    r.battery_pct = Battery::percentFromMillivolts(r.vbat_mV);
+    lastBatteryPct = r.battery_pct;
 
     // System clock is set by drainBuffer()'s NTP sync and persists across deep
     // sleep. Samples taken before the first successful upload are tagged 0 and
@@ -101,9 +116,9 @@ void sampleAndEnqueue() {
     r.timestamp = (now > 1700000000) ? static_cast<uint32_t>(now) : 0;
 
     RingBuffer::push(r);
-    Serial.printf("[MAIN] sample t1=%.2f t2=%.2f h1=%.2f h2=%.2f b=%u buffered=%u\n",
-                  r.temp1, r.temp2, r.humidity1, r.humidity2, r.battery_pct,
-                  RingBuffer::size());
+    Serial.printf("[MAIN] sample t1=%.2f t2=%.2f h1=%.2f h2=%.2f vbat=%umV b=%u buffered=%u\n",
+                  r.temp1, r.temp2, r.humidity1, r.humidity2,
+                  r.vbat_mV, r.battery_pct, RingBuffer::size());
 }
 
 }  // anonymous namespace
@@ -117,7 +132,10 @@ void setup() {
     delay(2000);
 
     initDeviceId();
-    Serial.printf("[MAIN] combsense sensor-tag-wifi id=%s\n", deviceId);
+    Serial.printf("[MAIN] combsense sensor-tag-wifi id=%s version=%s\n",
+                  deviceId, FIRMWARE_VERSION);
+
+    Ota::validateOnBoot();
 
     RingBuffer::initIfColdBoot();
 
@@ -144,7 +162,7 @@ void setup() {
     rtcSampleCounter++;
 
     if (rtcSampleCounter >= cfg.uploadEveryN) {
-        drainBuffer();
+        uploadAndCheckOta(lastBatteryPct);
         rtcSampleCounter = 0;
     } else {
         Serial.printf("[MAIN] not uploading this cycle (%u/%u)\n",

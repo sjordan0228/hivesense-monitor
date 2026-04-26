@@ -4,18 +4,31 @@
 #include <cstdint>
 
 // =============================================================================
-// Pin Definitions — Seeed XIAO ESP32-C6
+// Pin Definitions
+//
+// Defaults target the Seeed XIAO ESP32-C6.
+//   PIN_ONE_WIRE_GPIO    — C6 default: GPIO2 (D2, 4.7 kΩ pullup to 3V3)
+//   PIN_BATTERY_ADC_GPIO — C6 default: GPIO0 (A0)
+//
+// Override at build time via -DPIN_ONE_WIRE_GPIO=N / -DPIN_BATTERY_ADC_GPIO=N
+// (e.g. Waveshare ESP32-S3-Zero uses GPIO4 / GPIO1).
 // =============================================================================
 
-// I2C (SHT31) — D4/D5
+// I2C (SHT31) — D4/D5 on XIAO C6; not overridable (SHT31 S3 variant not built)
 constexpr uint8_t PIN_I2C_SDA = 4;
 constexpr uint8_t PIN_I2C_SCL = 5;
 
-// 1-Wire (DS18B20) — D2 with 4.7kΩ pullup to 3V3
-constexpr uint8_t PIN_ONE_WIRE = 2;
+// 1-Wire (DS18B20)
+#ifndef PIN_ONE_WIRE_GPIO
+#define PIN_ONE_WIRE_GPIO 2
+#endif
+constexpr uint8_t PIN_ONE_WIRE = PIN_ONE_WIRE_GPIO;
 
-// Battery ADC — A0 (GPIO 0 on XIAO C6)
-constexpr uint8_t PIN_BATTERY_ADC = 0;
+// Battery ADC
+#ifndef PIN_BATTERY_ADC_GPIO
+#define PIN_BATTERY_ADC_GPIO 0
+#endif
+constexpr uint8_t PIN_BATTERY_ADC = PIN_BATTERY_ADC_GPIO;
 
 // =============================================================================
 // Power / Timing Defaults
@@ -69,3 +82,12 @@ constexpr uint8_t  DS18B20_RESOLUTION_BITS      = 12;
 // =============================================================================
 
 constexpr size_t PAYLOAD_MAX_LEN = 160;
+
+// =============================================================================
+// OTA
+// =============================================================================
+
+constexpr const char* OTA_DEFAULT_HOST     = "192.168.1.61";
+constexpr uint8_t     OTA_BATTERY_FLOOR_PCT = 20;
+constexpr uint32_t    OTA_HTTP_TIMEOUT_MS  = 30000;
+constexpr const char* NVS_KEY_OTA_HOST     = "ota_host";

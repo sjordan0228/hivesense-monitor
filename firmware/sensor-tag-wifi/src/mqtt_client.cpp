@@ -2,6 +2,10 @@
 #include "config.h"
 #include "payload.h"
 
+#ifndef FIRMWARE_VERSION
+#define FIRMWARE_VERSION "unknown"
+#endif
+
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiClient.h>
@@ -55,12 +59,12 @@ bool connect(const char* deviceId) {
     return ok;
 }
 
-bool publish(const char* deviceId, const Reading& r) {
+bool publish(const char* deviceId, const Reading& r, int8_t rssi) {
     char topic[96];
     snprintf(topic, sizeof(topic), "%s%s/reading", MQTT_TOPIC_PREFIX, deviceId);
 
     char payload[PAYLOAD_MAX_LEN];
-    int n = Payload::serialize(deviceId, r, payload, sizeof(payload));
+    int n = Payload::serialize(deviceId, FIRMWARE_VERSION, rssi, r, payload, sizeof(payload));
     if (n < 0) {
         Serial.println("[MQTT] payload too large");
         return false;

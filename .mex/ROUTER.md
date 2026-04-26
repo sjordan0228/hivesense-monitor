@@ -1,7 +1,7 @@
 ---
 name: router
 description: Session bootstrap and navigation hub. Read at the start of every session before any task.
-last_updated: 2026-04-24 (Grafana home-yard dashboard provisioned and tracked in repo; tools/provision_tag.py committed)
+last_updated: 2026-04-25 (sensor-tag-wifi HTTP-pull OTA happy-path validated end-to-end on c5fffe12; tag deployed to yard on 5423c04; Battery::percentFromMillivolts extracted inline + 6 native tests added on ceb0fa4; truncation contract test added → 37 native tests on 0285a16; payload extended with v/vbat_mV/rssi fields → 38 native tests on 7f8d628; RingBuffer MAGIC bumped 0xCB50A001→0xCB50A002 + Reading static_assert added on 31de751; vbat_mV wired at sample time + RSSI captured post-connect and forwarded to publish on 12d8fab; dead Battery::readPercent dropped + RSSI cast documented on 4fb0541)
 ---
 
 ## Infrastructure
@@ -63,12 +63,19 @@ Read this file fully before doing anything else in this session.
   - Direct MQTT to local Mosquitto, RTC ring buffer for offline resilience
   - BSSID caching in RTC for fast reconnect
   - 18650 + solar powered, 5-min sample cadence by default
-  - Native Unity tests for payload serialization (6 passing, incl. t=0 case)
+  - Native Unity tests: 38 passing across payload (7), OTA manifest parser (9), OTA decision (6), OTA validate-on-boot (4), sha256 streamer (5), battery math (7) — Reading static_assert guards sizeof==24
   - Epoch timestamps via NTP sync in `drainBuffer()` — persists across deep sleep via RTC; pre-sync readings emit `t=0` which Telegraf replaces with arrival time
   - NaN temperatures serialize as JSON `null` (not `nan`) so Telegraf/Swift/Postgres parsers accept them
-  - USB-CDC serial console provisioning (WiFi/MQTT creds via `tools/provision_tag.py`)
+  - **Payload shape (7f8d628):** JSON now includes `v` (firmware version string), `vbat_mV` (raw ADC mV), `rssi` (dBm). `Reading` struct carries `vbat_mV uint16_t`. `Payload::serialize` signature extended with `fwVersion` and `rssi` params. `mqtt_client.cpp` passes `FIRMWARE_VERSION` macro with `"unknown"` fallback.
+  - **Fleet visibility wiring (12d8fab):** `sampleAndEnqueue` populates `r.vbat_mV` from `Battery::readMillivolts()` and derives `battery_pct` from the same value. `uploadAndCheckOta` captures `WiFi.RSSI()` once post-connect and forwards to every `MqttClient::publish()` call in the session. `publish()` signature now takes `int8_t rssi` (no more placeholder 0).
+  - USB-CDC serial console provisioning (WiFi/MQTT/OTA creds via `tools/provision_tag.py --ota-host ...`)
+  - HTTP-pull OTA on wake (manifest at `http://192.168.1.61/firmware/sensor-tag-wifi/<variant>/manifest.json`, sha256-verified, dual 1.5 MB OTA slots, bootloader auto-rollback if first publish after flash fails). Publish via `deploy/web/publish-firmware.sh <sht31|ds18b20|s3-ds18b20>`. nginx LAN-only allowlist on combsense-web LXC.
+  - **Hardware variants:** Seeed XIAO ESP32-C6 (default; envs `xiao-c6-sht31`, `xiao-c6-ds18b20`) and Waveshare ESP32-S3-Zero (env `waveshare-s3zero-ds18b20`, OTA variant `s3-ds18b20`). Pin map differs (S3: OneWire→GPIO4, batt ADC→GPIO1) via build-flag overrides in `include/config.h`. S3 board flagged as `esp32-s3-devkitc-1` because `waveshare_esp32_s3_zero` is not in the pioarduino board index. C6 yard tag unaffected by S3 work.
+  - **OTA transport:** raw `WiFiClient` + `IPAddress::fromString` for OTA fetches — bypasses `esp_http_client` / `esp-tls` / `getaddrinfo`, which on the C6 routes through OpenThread DNS64 and fails (EAI_FAIL/202) for IPv4 literals. PubSubClient uses the same WiFiClient transport. WiFi window is held across upload + OTA (was: connect → publish → disconnect → check; now: connect → publish → check → disconnect).
+  - **Validated 2026-04-25:** tag c5fffe12 OTA'd a720183 → 5423c04 end-to-end (download 1,056,480 B, sha256 verified, reboot, new fw published over MQTT, sleep 300s). Tag deployed to yard. Tasks 15b–15e (sha-mismatch / auto-rollback / low-battery skip / failed-version pin) still need bench validation.
 - **TSDB stack** (`combsense-tsdb` LXC, `deploy/tsdb/` for canonical configs)
   - Telegraf MQTT → Influx pipeline, arrival-time stamped, firmware `t` preserved as `sensor_ts` field
+  - sensor-tag-wifi fleet-visibility fields parsed (`v`→`fw_version` string, `vbat_mV` int, `rssi` int) — all `optional=true` so older payloads still parse during rollout
   - Downsample tasks: 15m cadence into `combsense_1h`, 6h cadence from `_1h` into `combsense_1d`
   - Daily `influx backup` via systemd timer, 14-day retention on disk
 - **iOS history feature** (in `sjordan0228/combsense`)
@@ -113,6 +120,8 @@ Read this file fully before doing anything else in this session.
 | Working on ESP32 firmware | `firmware/hive-node/` directory |
 | Working on collector firmware | `firmware/collector/` directory |
 | Working on home-yard WiFi variant | `firmware/sensor-tag-wifi/` directory |
+| Sensor-tag-wifi OTA | `firmware/sensor-tag-wifi/src/ota*.cpp` + `deploy/web/publish-firmware.sh` |
+| Sensor-tag-wifi pin map / variants | `firmware/sensor-tag-wifi/include/config.h` + `platformio.ini` build_flags |
 | Shared firmware headers | `firmware/shared/` directory |
 | Making a design decision | `.mex/context/decisions.md` |
 | Writing or reviewing code | `.mex/context/conventions.md` |

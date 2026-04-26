@@ -15,7 +15,8 @@ const char* knownKeys[] = {
     "weight_off", "weight_scl", "mqtt_host", "mqtt_port", "mqtt_user", "mqtt_pass",
     "tag_name", "tag_name_2", "adv_interval",
     "wifi_ssid", "wifi_pass",
-    "sample_int", "upload_every"
+    "sample_int", "upload_every",
+    "ota_host"
 };
 constexpr uint8_t NUM_KNOWN_KEYS = sizeof(knownKeys) / sizeof(knownKeys[0]);
 

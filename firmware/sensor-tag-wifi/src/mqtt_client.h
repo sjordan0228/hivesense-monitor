@@ -9,7 +9,7 @@ namespace MqttClient {
 bool connect(const char* deviceId);
 
 /// Publish a reading to `combsense/hive/<deviceId>/reading`. Returns true on ack.
-bool publish(const char* deviceId, const Reading& r);
+bool publish(const char* deviceId, const Reading& r, int8_t rssi);
 
 /// Disconnect gracefully.
 void disconnect();

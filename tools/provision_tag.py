@@ -1,34 +1,51 @@
 #!/usr/bin/env python3
-"""Provision a sensor-tag-wifi via its 3-second serial console window.
+"""Provision a sensor-tag-wifi via its serial console.
 
-Waits for the C6's USB CDC to appear, then sends a keypress to enter the
-console when it sees the prompt line, writes WiFi/MQTT creds, and exits
-back to normal operation.
+Waits for the C6's USB CDC to appear, sends provisioning commands over the
+console, then exits. Override defaults via CLI flags.
 """
+import argparse
+import glob
 import sys
 import time
-import glob
 import serial
 
 
 PORT_GLOB = "/dev/cu.usbmodem*"
 BAUD = 115200
-PROMPT_LINE = b"[CONSOLE]"
 SHELL_PROMPT = b"> "
 
-COMMANDS = [
-    "set wifi_ssid IOT",
-    "set wifi_pass 4696930759",
-    "set mqtt_host 192.168.1.82",
-    "set mqtt_port 1883",
-    "set mqtt_user hivesense",
-    "set mqtt_pass hivesense",
-    "set tag_name bench-ds18b20",
-    "set sample_int 30",
-    "set upload_every 1",
-    "list",
-    "exit",
-]
+
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser()
+    p.add_argument("--wifi-ssid", default="IOT")
+    p.add_argument("--wifi-pass", default="4696930759")
+    p.add_argument("--mqtt-host", default="192.168.1.82")
+    p.add_argument("--mqtt-port", default="1883")
+    p.add_argument("--mqtt-user", default="hivesense")
+    p.add_argument("--mqtt-pass", default="hivesense")
+    p.add_argument("--tag-name",  default="bench-ds18b20")
+    p.add_argument("--sample-int", default="30")
+    p.add_argument("--upload-every", default="1")
+    p.add_argument("--ota-host",  default="192.168.1.61")
+    return p.parse_args()
+
+
+def build_commands(a: argparse.Namespace) -> list[str]:
+    return [
+        f"set wifi_ssid {a.wifi_ssid}",
+        f"set wifi_pass {a.wifi_pass}",
+        f"set mqtt_host {a.mqtt_host}",
+        f"set mqtt_port {a.mqtt_port}",
+        f"set mqtt_user {a.mqtt_user}",
+        f"set mqtt_pass {a.mqtt_pass}",
+        f"set tag_name {a.tag_name}",
+        f"set sample_int {a.sample_int}",
+        f"set upload_every {a.upload_every}",
+        f"set ota_host {a.ota_host}",
+        "list",
+        "exit",
+    ]
 
 
 def find_port(timeout_s: float = 60.0) -> str:
@@ -89,18 +106,18 @@ def drain(ser: serial.Serial, duration_s: float) -> None:
 
 
 def main() -> None:
+    args = parse_args()
+    commands = build_commands(args)
+
     port = find_port()
     with open_serial(port) as ser:
         print("[prov] opened — probing for console")
-        # Send a harmless command to force the console to emit a fresh prompt.
-        # We may be mid-readLine from a previous session, so a bare newline
-        # wouldn't break out of the readLine skip-empty-lines path.
         ser.write(b"help\r")
         if not wait_for(ser, SHELL_PROMPT, timeout_s=5.0):
             print("\n[prov] no shell prompt — reconnect the C6 and retry")
             return
 
-        for cmd in COMMANDS:
+        for cmd in commands:
             print(f"\n[prov] >> {cmd}")
             ser.write(cmd.encode() + b"\r")
             wait_for(ser, SHELL_PROMPT, timeout_s=3.0)
