@@ -21,6 +21,7 @@ skills-lock.json
 .agents/
 .continue/
 .cocoindex_code/
+.memsearch/
 
 # Disposable debug snippets
 tools/i2c_scanner.cpp

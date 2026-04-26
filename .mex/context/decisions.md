@@ -1,7 +1,20 @@
 ---
 name: decisions
 description: Architectural decisions and their rationale
-last_updated: 2026-04-20
+triggers:
+  - "decision"
+  - "why did we"
+  - "rationale"
+  - "trade-off"
+  - "ADR"
+edges:
+  - target: context/architecture.md
+    condition: when a decision shaped the current system structure
+  - target: context/stack.md
+    condition: when a decision drove a specific technology choice
+  - target: context/conventions.md
+    condition: when a decision is enforced as a coding convention
+last_updated: 2026-04-26
 ---
 
 # Decisions

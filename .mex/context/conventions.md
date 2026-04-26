@@ -1,7 +1,20 @@
 ---
 name: conventions
 description: Coding conventions and project patterns
-last_updated: 2026-04-11
+triggers:
+  - "convention"
+  - "code style"
+  - "naming"
+  - "best practice"
+  - "verify"
+edges:
+  - target: context/architecture.md
+    condition: when conventions apply to a specific component or layer
+  - target: context/stack.md
+    condition: when a convention is tied to a specific library or framework
+  - target: patterns/INDEX.md
+    condition: when looking for a task-specific verify checklist
+last_updated: 2026-04-26
 ---
 
 # Conventions

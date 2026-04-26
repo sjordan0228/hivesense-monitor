@@ -1,7 +1,22 @@
 ---
 name: router
 description: Session bootstrap and navigation hub. Read at the start of every session before any task.
-last_updated: 2026-04-25 (sensor-tag-wifi HTTP-pull OTA happy-path validated end-to-end on c5fffe12; tag deployed to yard on 5423c04; Battery::percentFromMillivolts extracted inline + 6 native tests added on ceb0fa4; truncation contract test added → 37 native tests on 0285a16; payload extended with v/vbat_mV/rssi fields → 38 native tests on 7f8d628; RingBuffer MAGIC bumped 0xCB50A001→0xCB50A002 + Reading static_assert added on 31de751; vbat_mV wired at sample time + RSSI captured post-connect and forwarded to publish on 12d8fab; dead Battery::readPercent dropped + RSSI cast documented on 4fb0541)
+edges:
+  - target: AGENTS.md
+    condition: when needing project identity, non-negotiables, or commands
+  - target: context/architecture.md
+    condition: when working on system design, integrations, or understanding how components connect
+  - target: context/stack.md
+    condition: when working with specific technologies, libraries, or making tech decisions
+  - target: context/conventions.md
+    condition: when writing new code, reviewing code, or unsure about project patterns
+  - target: context/decisions.md
+    condition: when making architectural choices or understanding why something is built a certain way
+  - target: context/setup.md
+    condition: when setting up the dev environment or running the project for the first time
+  - target: patterns/INDEX.md
+    condition: when starting a task — check the pattern index for a matching pattern file
+last_updated: 2026-04-26
 ---
 
 ## Infrastructure
@@ -11,7 +26,7 @@ last_updated: 2026-04-25 (sensor-tag-wifi HTTP-pull OTA happy-path validated end
   - **InfluxDB 2.8** on `:8086`, org `combsense`
     - Buckets: `combsense` (raw, 30d) / `combsense_1h` (hourly, 365d) / `combsense_1d` (daily, ∞)
     - Measurement: `sensor_reading`. Tag: `sensor_id`. Fields: `t1`, `t2`, `b`, `sensor_ts`.
-    - Downsample tasks live in Influx metadata; canonical copies in `deploy/tsdb/downsample-*.flux`
+    - Downsample tasks live in Influx metadata; canonical copies in `deploy/tsdb/downsample-1h.flux` and `deploy/tsdb/downsample-1d.flux`
   - **Grafana 13** on `:3000` — `combsense-home-yard` dashboard provisioned (temp °F, battery, last-seen); JSON canonical at `deploy/tsdb/grafana/home-yard-sensors.json`
   - **Telegraf** — MQTT consumer `combsense/hive/+/reading` → Influx; config mirrored at `deploy/tsdb/telegraf-combsense.conf`
   - Tokens at `/root/.combsense-tsdb-creds` (mode 600): `admin_token`, `telegraf_write_token`, `ios_read_token`
@@ -66,13 +81,12 @@ Read this file fully before doing anything else in this session.
   - Native Unity tests: 38 passing across payload (7), OTA manifest parser (9), OTA decision (6), OTA validate-on-boot (4), sha256 streamer (5), battery math (7) — Reading static_assert guards sizeof==24
   - Epoch timestamps via NTP sync in `drainBuffer()` — persists across deep sleep via RTC; pre-sync readings emit `t=0` which Telegraf replaces with arrival time
   - NaN temperatures serialize as JSON `null` (not `nan`) so Telegraf/Swift/Postgres parsers accept them
-  - **Payload shape (7f8d628):** JSON now includes `v` (firmware version string), `vbat_mV` (raw ADC mV), `rssi` (dBm). `Reading` struct carries `vbat_mV uint16_t`. `Payload::serialize` signature extended with `fwVersion` and `rssi` params. `mqtt_client.cpp` passes `FIRMWARE_VERSION` macro with `"unknown"` fallback.
-  - **Fleet visibility wiring (12d8fab):** `sampleAndEnqueue` populates `r.vbat_mV` from `Battery::readMillivolts()` and derives `battery_pct` from the same value. `uploadAndCheckOta` captures `WiFi.RSSI()` once post-connect and forwards to every `MqttClient::publish()` call in the session. `publish()` signature now takes `int8_t rssi` (no more placeholder 0).
+  - **Fleet-visibility payload:** publishes `v` (firmware version), `vbat_mV` (raw battery ADC), and `rssi` (dBm post-connect) alongside `t1`/`t2`/`b`. `Reading` is fixed at 24 B (RTC ring magic `0xCB50A002`), guarded by `static_assert(sizeof(Reading) == 24)`. `vbat_mV` is captured at sample time and is the single source of truth for `battery_pct`. `RSSI` is captured once after WiFi associates and forwarded to every publish in that wake window.
   - USB-CDC serial console provisioning (WiFi/MQTT/OTA creds via `tools/provision_tag.py --ota-host ...`)
   - HTTP-pull OTA on wake (manifest at `http://192.168.1.61/firmware/sensor-tag-wifi/<variant>/manifest.json`, sha256-verified, dual 1.5 MB OTA slots, bootloader auto-rollback if first publish after flash fails). Publish via `deploy/web/publish-firmware.sh <sht31|ds18b20|s3-ds18b20>`. nginx LAN-only allowlist on combsense-web LXC.
-  - **Hardware variants:** Seeed XIAO ESP32-C6 (default; envs `xiao-c6-sht31`, `xiao-c6-ds18b20`) and Waveshare ESP32-S3-Zero (env `waveshare-s3zero-ds18b20`, OTA variant `s3-ds18b20`). Pin map differs (S3: OneWire→GPIO4, batt ADC→GPIO1) via build-flag overrides in `include/config.h`. S3 board flagged as `esp32-s3-devkitc-1` because `waveshare_esp32_s3_zero` is not in the pioarduino board index. C6 yard tag unaffected by S3 work.
+  - **Hardware variants:** Seeed XIAO ESP32-C6 (default; envs `xiao-c6-sht31`, `xiao-c6-ds18b20`) and Waveshare ESP32-S3-Zero (env `waveshare-s3zero-ds18b20`, OTA variant `s3-ds18b20`). Pin map differs (S3: OneWire→GPIO4, batt ADC→GPIO1) via build-flag overrides in `firmware/sensor-tag-wifi/include/config.h`. S3 board flagged as `esp32-s3-devkitc-1` because `waveshare_esp32_s3_zero` is not in the pioarduino board index. C6 yard tag unaffected by S3 work.
+  - **S3-Zero variant: NOT RECOMMENDED for solar/deep-sleep deployment.** Stock AMS1117-3.3 LDO needs >4.3V VIN; cannot run from raw 18650 VBAT. MH-CD42 charge+boost module (the obvious workaround) auto-shuts its 5V output when load <45 mA for >32 s, which deep-sleep always trips. Viable fixes require either replacing the S3-Zero LDO with XC6206/HT7333 (SMD rework) or feeding 3V3 from an external low-dropout LDO breakout off `BAT`. Env kept for future revival; default to C6 `ds18b20` for new deployments.
   - **OTA transport:** raw `WiFiClient` + `IPAddress::fromString` for OTA fetches — bypasses `esp_http_client` / `esp-tls` / `getaddrinfo`, which on the C6 routes through OpenThread DNS64 and fails (EAI_FAIL/202) for IPv4 literals. PubSubClient uses the same WiFiClient transport. WiFi window is held across upload + OTA (was: connect → publish → disconnect → check; now: connect → publish → check → disconnect).
-  - **Validated 2026-04-25:** tag c5fffe12 OTA'd a720183 → 5423c04 end-to-end (download 1,056,480 B, sha256 verified, reboot, new fw published over MQTT, sleep 300s). Tag deployed to yard. Tasks 15b–15e (sha-mismatch / auto-rollback / low-battery skip / failed-version pin) still need bench validation.
 - **TSDB stack** (`combsense-tsdb` LXC, `deploy/tsdb/` for canonical configs)
   - Telegraf MQTT → Influx pipeline, arrival-time stamped, firmware `t` preserved as `sensor_ts` field
   - sensor-tag-wifi fleet-visibility fields parsed (`v`→`fw_version` string, `vbat_mV` int, `rssi` int) — all `optional=true` so older payloads still parse during rollout
@@ -95,10 +109,10 @@ Read this file fully before doing anything else in this session.
   - `web/accounts/`: custom User model (email login, `role` field), `EmailAuthenticationForm`, `CombSenseLoginView`, `CombSenseLogoutView` (POST-only), `accounts:login` / `accounts:logout` / 4 password-reset URLs namespaced
   - `EMAIL_BACKEND` reads from `DJANGO_EMAIL_BACKEND` env (console fallback for dev; Plan D wires SMTP); warning comment on silent prod failure mode
   - `web/core/`: `core:home` template-rendered view (login_required) with logout form + conditional admin link
-  - `web/templates/`: `base.html` shell, `registration/login.html`, password-reset templates; `core/templates/core/home.html`
+  - `web/templates/`: `web/templates/base.html` shell, `web/templates/registration/login.html`, password-reset templates; `web/core/templates/core/home.html`
   - `web/requirements.txt` (Django 5.2.13 LTS — upgraded from 5.0.9 to fix Python 3.14 context copy regression)
   - **Tests:** 19 passing across `accounts` and `core` (8 model, 5 auth view, 3 password reset, 3 home view)
-  - **Deploy artifacts** (`deploy/web/`): `combsense-web.service` (gunicorn systemd unit, `WorkingDirectory=/opt/combsense-web/web`), `combsense-web.service.d/override.conf` (unprivileged LXC sandboxing workaround), `env.template`, `provision.sh` (idempotent bootstrap via `env --file`; runs migrate/collectstatic from `${INSTALL_DIR}/web`), `README.md` (operator runbook)
+  - **Deploy artifacts** (`deploy/web/`): `deploy/web/combsense-web.service` (gunicorn systemd unit, `WorkingDirectory=/opt/combsense-web/web`), `deploy/web/combsense-web.service.d/override.conf` (unprivileged LXC sandboxing workaround), `deploy/web/env.template`, `deploy/web/provision.sh` (idempotent bootstrap via `env --file`; runs migrate/collectstatic from `${INSTALL_DIR}/web`), `deploy/web/README.md` (operator runbook)
   - `web/.venv/` (Python 3.14 locally; LXC runs Python 3.11; not committed); `web/.env` (not committed)
 
 ### Not yet built
@@ -120,7 +134,7 @@ Read this file fully before doing anything else in this session.
 | Working on ESP32 firmware | `firmware/hive-node/` directory |
 | Working on collector firmware | `firmware/collector/` directory |
 | Working on home-yard WiFi variant | `firmware/sensor-tag-wifi/` directory |
-| Sensor-tag-wifi OTA | `firmware/sensor-tag-wifi/src/ota*.cpp` + `deploy/web/publish-firmware.sh` |
+| Sensor-tag-wifi OTA | `firmware/sensor-tag-wifi/src/ota.cpp` and friends (`ota_decision.cpp`, `ota_manifest.cpp`, `ota_sha256.cpp`, `ota_state.cpp`) + `deploy/web/publish-firmware.sh` |
 | Sensor-tag-wifi pin map / variants | `firmware/sensor-tag-wifi/include/config.h` + `platformio.ini` build_flags |
 | Shared firmware headers | `firmware/shared/` directory |
 | Making a design decision | `.mex/context/decisions.md` |
@@ -137,4 +151,4 @@ For every task, follow this loop:
 1. **CONTEXT** — Load the relevant context file(s) from the routing table above.
 2. **BUILD** — Do the work on `dev` (not `main`). Feature branches off `dev`.
 3. **VERIFY** — Build and test.
-4. **GROW** — Update context files (this file, `decisions.md`, `conventions.md`) when anything architectural or operational changes. Not just ROUTER — the underlying files too.
+4. **GROW** — Update context files (this file, `.mex/context/decisions.md`, `.mex/context/conventions.md`) when architecture, deployment topology, or decisions change. Not just ROUTER — the underlying files too. Session-by-session task progress, validation runs, and bench-test journal entries are captured automatically by memsearch (`.memsearch/memory/`) — do not duplicate them here.
