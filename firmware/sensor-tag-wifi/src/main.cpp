@@ -23,10 +23,24 @@ uint8_t lastBatteryPct = 0;
 
 char deviceId[9] = {0};
 
-/// Derive an 8-hex-char device ID from the eFuse MAC (low 4 bytes).
+/// Derive an 8-hex-char device ID from the chip's BASE MAC (low 4 bytes).
+///
+/// IMPORTANT — DO NOT use `esp_efuse_mac_get_default()` here. On ESP32-C6
+/// that function returns the first 6 bytes of the 8-byte 802.15.4 / Thread
+/// EUI-64 — which has the constant fill bytes `FF:FE` inserted in the
+/// middle. The result is e.g. `58:e6:c5:FF:FE:12` instead of the actual
+/// BASE MAC `58:e6:c5:12:7f:04`. Taking bytes [2..5] of that EUI-64 gives
+/// `c5:FF:FE:XX` which only varies in one byte across chips → collisions
+/// at ~16 chips by birthday paradox. We saw this in practice.
+///
+/// `esp_read_mac(mac, ESP_MAC_WIFI_STA)` returns the actual 48-bit BASE
+/// MAC. Its bytes [2..5] give 3 bytes of chip-unique entropy plus one
+/// OUI byte — ~16M combinations, collision-safe at apiary scale.
 void initDeviceId() {
     uint8_t mac[6];
-    esp_efuse_mac_get_default(mac);
+    esp_read_mac(mac, ESP_MAC_WIFI_STA);
+    Serial.printf("[MAC] base=%02x:%02x:%02x:%02x:%02x:%02x\n",
+                  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     snprintf(deviceId, sizeof(deviceId), "%02x%02x%02x%02x",
              mac[2], mac[3], mac[4], mac[5]);
 }
