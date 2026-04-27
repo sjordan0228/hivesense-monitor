@@ -5,6 +5,8 @@
 #include <WiFi.h>
 #include <Preferences.h>
 #include <esp_system.h>
+#include <esp_sntp.h>
+#include <lwip/ip_addr.h>
 #include <time.h>
 #include <cstring>
 
@@ -15,7 +17,12 @@ RTC_DATA_ATTR uint8_t rtcBssid[6]   = {0};
 RTC_DATA_ATTR int32_t rtcChannel    = 0;
 RTC_DATA_ATTR uint8_t rtcBssidValid = 0;
 
-constexpr const char* NTP_SERVER = "pool.ntp.org";
+// Google public NTP, anycast IPv4 literal. We bypass DNS deliberately —
+// hostname resolution on the ESP32-C6 routes through OpenThread DNS64 and
+// fails for SNTP the same way it does for HTTP (issue #19, mirroring the
+// OTA fix in stack.md). Hardcoded for simplicity; pivot to NVS-configurable
+// only if a deployment needs a different NTP source.
+constexpr const char* NTP_SERVER = "216.239.35.4";
 
 bool waitForConnect(uint32_t timeoutMs) {
     uint32_t start = millis();
@@ -82,13 +89,36 @@ void disconnect() {
 }
 
 uint32_t getUnixTime() {
-    configTime(0, 0, NTP_SERVER);
+    // Bypass configTime() — on ESP32-C6 it routes through OpenThread DNS64
+    // (even when given an IP literal) and fails with "Cannot find NAT64
+    // prefix". Use the lower-level LWIP SNTP API with an ip_addr_t directly.
+    // Same pattern as the OTA fix in stack.md.
+    Serial.printf("[NTP] starting query to %s\n", NTP_SERVER);
+
+    ip_addr_t addr;
+    IP_ADDR4(&addr, 216, 239, 35, 4);  // Google NTP — matches NTP_SERVER literal
+
+    if (esp_sntp_enabled()) {
+        esp_sntp_stop();
+    }
+    esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    esp_sntp_setserver(0, &addr);
+    esp_sntp_init();
+
     time_t now = 0;
-    for (uint8_t i = 0; i < 30; ++i) {
+    for (uint16_t i = 0; i < 50; ++i) {  // 10 s
         time(&now);
-        if (now > 1700000000) return static_cast<uint32_t>(now);
+        if (now > 1700000000) {
+            Serial.printf("[NTP] sync ok t=%lu (waited %ums)\n",
+                          static_cast<unsigned long>(now), i * 200);
+            return static_cast<uint32_t>(now);
+        }
+        if (i > 0 && i % 5 == 0) {
+            Serial.printf("[NTP] still waiting... %us\n", i / 5);
+        }
         delay(200);
     }
+    Serial.println("[NTP] sync timeout (10s)");
     return 0;
 }
 
