@@ -46,11 +46,31 @@ The deployed node is **two PCBs** plus off-board sensor modules.
 | RESET button (EN) | Same part as BOOT — TS-1187A-B-A (LCSC C720477) | |
 | Auto-reset NPNs ×2 | **MMBT3904** (LCSC C20526) | Classic two-transistor CH340 DTR/RTS → EN/IO0 circuit, Espressif reference. **Schematic note: tie into the same GPIO0 and EN nets as the manual BOOT/RESET buttons — don't route as separate nets.** |
 | Auto-reset base resistors ×2 | 10kΩ 0603 1% (LCSC C25804) | Base current limiting on the NPNs. |
-| USB-C connector + CH340C | (BOM scrub pending — §2.7 Section 3) | High-level: USB-C jack + CC pull-downs + CH340C USB-UART bridge + auto-reset (above). Plug-and-play flashing across Mac/Win/Linux. |
 | Status LED | SMD bicolor red/green | (BOM scrub pending) Two GPIOs (47, 48). Firmware drives boot/associate/sleep/OTA states. |
 
-**Section 2 cost:** ~$3.40/board (MCU module dominates).
-**Running BOM total:** ~$4.70/board (power chain + MCU/reset/boot).
+**Section cost:** ~$3.40/board (MCU module dominates).
+
+### USB and programming — BOM-locked
+
+| Item | Decision | Notes |
+|---|---|---|
+| USB-C connector | **TYPE-C-31-M-12** (LCSC C165948) — 6-pin USB 2.0 variant | 6 active pins (VBUS, GND, D+, D−, CC1, CC2) + TH mechanical tabs. JLCPCB Basic Parts. No USB 3.0, no PD support — intentional. BQ24074 handles power negotiation via DPM. |
+| CC1 / CC2 pull-downs | 5.1kΩ 0603 1% ×2 (LCSC C23186) | One per CC pin, both to GND. Orientation-independent UFP detection. |
+| USB ESD protection | **USBLC6-2SC6** (LCSC C7519) | TVS array on D+/D−/VBUS. SOT-23-6. |
+| USB-UART bridge | **CH340C** (LCSC C84681) | Internal oscillator (no crystal needed). UART0 via GPIO43/44. JLCPCB Basic Parts. |
+| CH340C VCC decoupling | 100nF 0603 X7R (LCSC C14663) | At pin 6. |
+| CH340C V3 cap | 100nF 0603 X7R (LCSC C14663) | At pin 4 (internal regulator output) — **datasheet-required, do not omit.** |
+| CH340C TX/RX series resistors ×2 | 0Ω 0603 (LCSC C17168) | Placeholders. Defaults to 0Ω; swap to 33Ω–100Ω without respin if signal-integrity issues arise. |
+| USB-C VBUS bulk cap | 10µF 0805 X7R 10V (LCSC C15850) | At VBUS entry. |
+| USB-C VBUS HF cap | 100nF 0603 X7R (LCSC C14663) | High-frequency bypass at VBUS entry. |
+
+**Section cost:** ~$0.72/board.
+**Running BOM total:** ~$5.42/board (power chain + MCU/reset/boot + USB/programming).
+
+**Schematic-capture notes:**
+1. Auto-reset NPN pair (in MCU/reset/boot section above) ties CH340C DTR/RTS into the **same** GPIO0 / EN nets as the manual BOOT/RESET buttons. Don't route as separate nets.
+2. VBUS routing: USB-C VBUS → USBLC6 clamp → bulk/HF caps → BQ24074 USB input pin (**separate** from solar input pin). BQ24074 internally OR's USB and solar inputs — **do not add an external OR-ing diode or FET between them.**
+3. UART cross-over: CH340C TX → ESP32 RX (GPIO44); CH340C RX → ESP32 TX (GPIO43). Standard convention but easy to get backward — double-check during schematic capture.
 
 ### Power chain — BOM-locked
 
