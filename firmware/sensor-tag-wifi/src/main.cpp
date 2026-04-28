@@ -1,10 +1,12 @@
 #include <Arduino.h>
+#include <ArduinoJson.h>
 #include <Preferences.h>
 #include <WiFi.h>
 #include <esp_mac.h>
 #include <esp_sleep.h>
 
 #include "config.h"
+#include "config_parser.h"
 #include "reading.h"
 #include "sensor.h"
 #include "battery.h"
@@ -61,6 +63,127 @@ Config loadConfig() {
     return c;
 }
 
+/// Apply a parsed config update to NVS. Only writes keys whose values
+/// differ from what's already stored — preserves idempotency for retained
+/// MQTT messages. Populates `applied` and `currentState` with the post-
+/// write view, used by the ack message.
+struct AckSummary {
+    uint8_t numApplied;
+    char    applied[ConfigParser::MAX_REJECTED_KEYS][ConfigParser::REJECTED_KEY_LEN];
+};
+
+void appendApplied(AckSummary& s, const char* key) {
+    if (s.numApplied >= ConfigParser::MAX_REJECTED_KEYS) return;
+    strncpy(s.applied[s.numApplied], key, ConfigParser::REJECTED_KEY_LEN - 1);
+    s.applied[s.numApplied][ConfigParser::REJECTED_KEY_LEN - 1] = '\0';
+    s.numApplied += 1;
+}
+
+AckSummary applyConfigToNvs(const ConfigParser::ConfigUpdate& u) {
+    AckSummary s {};
+    Preferences prefs;
+    prefs.begin(NVS_NAMESPACE, false);  // RW
+
+    if (u.has_sample_int) {
+        uint16_t cur = prefs.getUShort(NVS_KEY_SAMPLE_INT, DEFAULT_SAMPLE_INTERVAL_SEC);
+        if (cur != u.sample_int) {
+            prefs.putUShort(NVS_KEY_SAMPLE_INT, u.sample_int);
+            appendApplied(s, "sample_int");
+        }
+    }
+    if (u.has_upload_every) {
+        uint8_t cur = prefs.getUChar(NVS_KEY_UPLOAD_EVERY, DEFAULT_UPLOAD_EVERY_N);
+        if (cur != u.upload_every) {
+            prefs.putUChar(NVS_KEY_UPLOAD_EVERY, u.upload_every);
+            appendApplied(s, "upload_every");
+        }
+    }
+    if (u.has_tag_name) {
+        String cur = prefs.getString(NVS_KEY_TAG_NAME, "");
+        if (cur != u.tag_name) {
+            prefs.putString(NVS_KEY_TAG_NAME, u.tag_name);
+            appendApplied(s, "tag_name");
+        }
+    }
+    if (u.has_ota_host) {
+        String cur = prefs.getString(NVS_KEY_OTA_HOST, OTA_DEFAULT_HOST);
+        if (cur != u.ota_host) {
+            prefs.putString(NVS_KEY_OTA_HOST, u.ota_host);
+            appendApplied(s, "ota_host");
+        }
+    }
+
+    prefs.end();
+    return s;
+}
+
+/// Build the ack message JSON. Reads current NVS to populate current_state
+/// (post-apply view).
+size_t buildAckJson(const AckSummary& applied,
+                    const ConfigParser::ConfigUpdate& parsed,
+                    char* out, size_t outCap) {
+    JsonDocument doc;
+
+    JsonArray arrApplied = doc["applied"].to<JsonArray>();
+    for (uint8_t i = 0; i < applied.numApplied; ++i) {
+        arrApplied.add(applied.applied[i]);
+    }
+
+    JsonArray arrRejected = doc["rejected"].to<JsonArray>();
+    for (uint8_t i = 0; i < parsed.num_rejected; ++i) {
+        arrRejected.add(parsed.rejected[i]);
+    }
+
+    Preferences prefs;
+    prefs.begin(NVS_NAMESPACE, true);
+    JsonObject state = doc["current_state"].to<JsonObject>();
+    state["sample_int"]   = prefs.getUShort(NVS_KEY_SAMPLE_INT, DEFAULT_SAMPLE_INTERVAL_SEC);
+    state["upload_every"] = prefs.getUChar(NVS_KEY_UPLOAD_EVERY, DEFAULT_UPLOAD_EVERY_N);
+    state["tag_name"]     = prefs.getString(NVS_KEY_TAG_NAME, "");
+    state["ota_host"]     = prefs.getString(NVS_KEY_OTA_HOST, OTA_DEFAULT_HOST);
+    prefs.end();
+
+    return serializeJson(doc, out, outCap);
+}
+
+/// Callback invoked by MqttClient::loop() when a message arrives on a
+/// subscribed topic. We only subscribe to one topic per session — the
+/// per-device config topic — so no topic dispatch is needed.
+void handleConfigMessage(const char* topic, const uint8_t* payload, size_t len) {
+    Serial.printf("[CONFIG] received %u bytes on %s\n",
+                  static_cast<unsigned>(len), topic);
+
+    // Make a NUL-terminated copy for the parser.
+    char body[256];
+    if (len >= sizeof(body)) {
+        Serial.println("[CONFIG] payload too large, ignoring");
+        return;
+    }
+    memcpy(body, payload, len);
+    body[len] = '\0';
+
+    ConfigParser::ConfigUpdate parsed;
+    if (!ConfigParser::parse(body, parsed)) {
+        Serial.println("[CONFIG] parse failed");
+        return;
+    }
+
+    AckSummary applied = applyConfigToNvs(parsed);
+    Serial.printf("[CONFIG] applied=%u rejected=%u\n",
+                  applied.numApplied, parsed.num_rejected);
+
+    // Publish ack to `combsense/hive/<id>/config/ack`.
+    char ackTopic[96];
+    snprintf(ackTopic, sizeof(ackTopic), "%s%s/config/ack",
+             MQTT_TOPIC_PREFIX, deviceId);
+
+    char ackBody[384];
+    size_t ackLen = buildAckJson(applied, parsed, ackBody, sizeof(ackBody));
+    if (ackLen > 0 && ackLen < sizeof(ackBody)) {
+        MqttClient::publishRaw(ackTopic, ackBody, false);  // not retained
+    }
+}
+
 /// Drain readings over MQTT and run the OTA check inside a single WiFi window.
 /// OTA must share the radio session with MQTT — a separate connect after
 /// disconnect leaves a window where WiFi.mode(OFF) makes esp_http_client fail.
@@ -74,26 +197,44 @@ void uploadAndCheckOta(uint8_t batteryPct) {
     // deep sleep once set, so subsequent samples get real timestamps.
     WifiManager::getUnixTime();
 
-    if (RingBuffer::size() > 0) {
-        if (MqttClient::connect(deviceId)) {
-            // WiFi.RSSI() is int32_t; real-world range -100..-30 dBm fits int8_t.
-            // Captured post-connect so association is confirmed.
-            int8_t sessionRssi = static_cast<int8_t>(WiFi.RSSI());
-            Serial.printf("[MAIN] mqtt connected rssi=%d dBm\n", sessionRssi);
-            uint8_t sent = 0;
-            while (RingBuffer::size() > 0) {
-                Reading r;
-                if (!RingBuffer::peekOldest(r)) break;
-                if (!MqttClient::publish(deviceId, r, sessionRssi)) break;
-                RingBuffer::popOldest();
-                sent++;
-                Ota::onPublishSuccess();
-            }
-            Serial.printf("[MAIN] sent %u / remaining %u\n", sent, RingBuffer::size());
-            MqttClient::disconnect();
-        } else {
-            Serial.println("[MAIN] no mqtt — keeping buffer");
+    // Connect MQTT regardless of buffer state — we still want to drain
+    // any retained config messages even if there are no readings to send.
+    bool mqttUp = MqttClient::connect(deviceId);
+    if (!mqttUp) {
+        Serial.println("[MAIN] no mqtt — keeping buffer, skipping config + OTA");
+    } else {
+        // WiFi.RSSI() is int32_t; real-world range -100..-30 dBm fits int8_t.
+        // Captured post-connect so association is confirmed.
+        int8_t sessionRssi = static_cast<int8_t>(WiFi.RSSI());
+        Serial.printf("[MAIN] mqtt connected rssi=%d dBm\n", sessionRssi);
+
+        // Subscribe to the per-device config topic. Retained messages (if
+        // any) are delivered immediately on subscribe; loop() pumps the
+        // pubsub callback so handleConfigMessage runs in this same wake.
+        MqttClient::setMessageHandler(handleConfigMessage);
+        char configTopic[96];
+        snprintf(configTopic, sizeof(configTopic), "%s%s/config",
+                 MQTT_TOPIC_PREFIX, deviceId);
+        MqttClient::subscribe(configTopic);
+        MqttClient::loop(500);  // 500 ms drain window for retained config
+
+        // Now drain readings.
+        uint8_t sent = 0;
+        while (RingBuffer::size() > 0) {
+            Reading r;
+            if (!RingBuffer::peekOldest(r)) break;
+            if (!MqttClient::publish(deviceId, r, sessionRssi)) break;
+            RingBuffer::popOldest();
+            sent++;
+            Ota::onPublishSuccess();
         }
+        Serial.printf("[MAIN] sent %u / remaining %u\n", sent, RingBuffer::size());
+
+        // One more brief loop to flush any in-flight ack from the config
+        // handler — publishRaw is QoS 0, return-on-buffered, not on broker
+        // ack.
+        MqttClient::loop(200);
+        MqttClient::disconnect();
     }
 
     if (batteryPct > 0) {

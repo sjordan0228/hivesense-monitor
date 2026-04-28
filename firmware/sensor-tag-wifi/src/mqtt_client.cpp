@@ -22,6 +22,15 @@ uint16_t mqttPort   = DEFAULT_MQTT_PORT;
 char mqttUser[32]   = "";
 char mqttPass[64]   = "";
 
+MqttClient::MessageHandler g_handler = nullptr;
+
+/// Trampoline from PubSubClient's callback signature into our public type.
+void pubsubCallback(char* topic, byte* payload, unsigned int length) {
+    if (g_handler != nullptr) {
+        g_handler(topic, payload, static_cast<size_t>(length));
+    }
+}
+
 void loadConfig() {
     Preferences prefs;
     prefs.begin(NVS_NAMESPACE, true);
@@ -85,6 +94,43 @@ bool publish(const char* deviceId, const Reading& r, int8_t rssi) {
         delay(50);
     }
     return true;
+}
+
+bool publishRaw(const char* topic, const char* payload, bool retained) {
+    bool ok = pubsub.publish(topic, payload, retained);
+    if (!ok) {
+        Serial.printf("[MQTT] publishRaw failed state=%d topic=%s\n",
+                      pubsub.state(), topic);
+    } else {
+        // Same TX-drain-on-tear-down concern as publish() above.
+        for (int i = 0; i < 4; i++) {
+            pubsub.loop();
+            delay(50);
+        }
+    }
+    return ok;
+}
+
+void setMessageHandler(MessageHandler handler) {
+    g_handler = handler;
+    pubsub.setCallback(pubsubCallback);
+}
+
+bool subscribe(const char* topic) {
+    bool ok = pubsub.subscribe(topic);
+    if (!ok) {
+        Serial.printf("[MQTT] subscribe failed state=%d topic=%s\n",
+                      pubsub.state(), topic);
+    }
+    return ok;
+}
+
+void loop(uint32_t ms) {
+    uint32_t start = millis();
+    while (millis() - start < ms) {
+        pubsub.loop();
+        delay(10);
+    }
 }
 
 void disconnect() {
