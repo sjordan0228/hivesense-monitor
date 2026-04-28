@@ -67,14 +67,16 @@ The deployed node is **two PCBs** plus off-board sensor modules.
 
 **Schematic-capture notes:**
 1. Auto-reset NPN pair (in MCU/reset/boot section above) ties CH340C DTR/RTS into the **same** GPIO0 / EN nets as the manual BOOT/RESET buttons. Don't route as separate nets.
-2. VBUS routing: USB-C VBUS → USBLC6 clamp → bulk/HF caps → BQ24074 USB input pin (**separate** from solar input pin). BQ24074 internally OR's USB and solar inputs — **do not add an external OR-ing diode or FET between them.**
+2. **VBUS routing (corrected):** USB-C VBUS → USBLC6 clamp → bulk/HF caps → **SS14 Schottky → BQ24074 IN pin (Pin 13)**. The **BQ24074 has only ONE IN pin** — USB and solar must be OR'd *externally* before reaching it. The solar path goes: Solar+ → polyfuse → P-FET ideal-diode → SS14 Schottky → same IN pin. Both Schottky cathodes meet at the IN net.
+   - **Why this matters:** without the diode-OR, USB plugged in (5V) with solar in the dark (0V) drives the solar P-FET fully ON (V_GS = −5V), and USB will aggressively backfeed into the dark solar panel — risk of panel damage and USB-port OCP trip. The Schottkies block reverse current in either direction.
+   - **Voltage budget:** ~0.3V drop per Schottky leaves ≥ 4.7V at IN under USB, which is well above the BQ24074's ~4.4V minimum charging voltage. No issue.
 3. UART cross-over: CH340C TX → ESP32 RX (GPIO44); CH340C RX → ESP32 TX (GPIO43). Standard convention but easy to get backward — double-check during schematic capture.
 
 ### Power chain — BOM-locked
 
 | Item | Decision | Notes |
 |---|---|---|
-| Charge controller | **TI BQ24074RGTR** (LCSC C54313) | QFN-16, 3×3mm. Operating input 4.35–6.45V, abs max 28V. **LCSC stock tight (~1,066 units at scrub time) — order within 30 days of layout finalization.** USB + solar inputs, power-path management, thermal regulation, USB-C DPM. No MPPT — compensated by panel sizing. |
+| Charge controller | **TI BQ24074RGTR** (LCSC C54313) | QFN-16, 3×3mm. **Operating input 4.4V–10.5V** (above VBAT_REG + 200mV minimum, below 10.5V OVP threshold). Absolute max 28V. **Single IN pin (Pin 13)** — USB and solar must be diode-OR'd externally; see USB/programming §2 schematic notes. **LCSC stock tight (~1,066 units at scrub time) — order within 30 days of layout finalization.** Power-path management, thermal regulation, USB-C DPM. No MPPT — compensated by panel sizing. |
 | BQ24074 — ISET | 1.13kΩ 0603 1% | Sets USB charge current to ~1A (R_ISET = 890/I_chg). Solar caps at panel's 200mA naturally. |
 | BQ24074 — ITERM | 11kΩ 0603 1% (LCSC C25744) | ~100mA termination current (functionally identical to 11.3kΩ). JLCPCB Basic Parts. |
 | BQ24074 — TS pin | 10kΩ + 10kΩ divider to VREF | Holds TS at 0.5×VREF — IC reads "thermistor OK, charge normally." No NTC needed. Kit-friendly, avoids gluing a thermistor to the 18650. |
@@ -90,6 +92,7 @@ The deployed node is **two PCBs** plus off-board sensor modules.
 | P-FET gate Zener | BZT52C12 (LCSC C8062) | 12V Zener, gate-to-source clamp. SOD-123. Protects V_GS(max) against high-Voc panels. |
 | P-FET gate pulldown | 100kΩ 0603 1% | Gate-to-source. |
 | Solar TVS clamp | SMBJ24CA (LCSC C8978) | Bidirectional 24V TVS, post-FET to GND. SMB package. |
+| **Input OR Schottkies ×2** | **SS14** (LCSC C2480) | SMA, 40V/1A, V_F ≈ 0.3V. One on USB VBUS path, one on solar (post-P-FET) path. Cathodes both tie to BQ24074 IN. **Required** because BQ24074 has a single IN pin — without external OR-ing, USB backfeeds into a dark solar panel. |
 | Battery protection IC | **DW01A** (LCSC C8396) | SOT-23-6. JLCPCB Basic Parts. Over-discharge/over-charge/over-current cutoff. |
 | Battery protection MOSFETs | **FS8205A** (LCSC C32254) | SOT-23-6 dual N-channel. JLCPCB Basic Parts. Pairs with DW01A per standard reference design. |
 | 3.3V LDO | **TI TPS73633DBVR** (LCSC C28038) | SOT-23-5, fixed 3.3V, 1µA Iq, 400mA. |
@@ -108,6 +111,8 @@ The deployed node is **two PCBs** plus off-board sensor modules.
 |---|---|---|
 | Solar screw terminal | KF128 3.5mm 2-pos (LCSC C8251) | Between polyfuse and P-FET. + / −. |
 | Mic screw terminal | KF128 3.5mm 5-pos (LCSC C396644) | VCC / GND / BCLK / LRCL / DOUT. **Verify stock at lcsc.com before fab — 5-pos is less common than 2/3-pos. Fallback: 2-pos + 3-pos adjacent.** |
+| I²S BCLK series resistor | 33Ω 0603 1% (LCSC C25104) | **Place close to ESP32 GPIO4 pin** (not at the mic terminal). Dampens ringing on the I²S clock when the mic is at the end of a ~1m unshielded cable. 1.5–3 MHz BCLK over long wire = guaranteed reflections without termination. |
+| I²S LRCL series resistor | 33Ω 0603 1% (LCSC C25104) | Same — close to ESP32 GPIO5. LRCL switches at audio sample rate (much slower than BCLK) but still benefits from edge-rate damping over the cable run. |
 | DS18B20 screw terminal | KF128 3.5mm 3-pos (LCSC C8252) | VCC / DATA / GND. |
 | DS18B20 1-Wire pull-up | 4.7kΩ 0603 1% (LCSC C23162) | DATA to VCC on carrier. |
 | HX711 plug-in socket | 4-pin 2.54mm female header, right-angle (LCSC C146928) | Pin order: **GND / DT / SCK / VCC** (verified from kit photo). HX711 module mounts flat parallel to carrier. |
@@ -129,14 +134,14 @@ The deployed node is **two PCBs** plus off-board sensor modules.
 
 ### 2.5 Solar panel sizing — important
 
-The BQ24074 has a narrow input window. Picking the wrong panel silently fails the kit.
+The BQ24074 has an **OVP threshold of 10.5V** and absolute max of 28V — wider than I originally thought (10.5V is the BQ24074's number; the BQ24075 has the narrower 6.6V OVP that I was confusing it with). The kit still recommends the FellDen 5V panel for charge-current matching and surge margin, but a buyer who shows up with a 6V or even a 9V panel will *also* charge correctly.
 
 | Panel spec | Voc (no load) | Works? | Notes |
 |---|---|---|---|
-| **5V nominal, 1–6W** | 5.5–6V | ✅ **Recommended** | Perfect match. Kit ships with FellDen 5-pack (1W each); buyer wires 2–3 in parallel. |
-| **6V nominal, 3–6W** | 6.5–7V | ⚠️ Marginal | At OVP threshold (~6.45–6.7V). Cold-day Voc spikes can clip charging. |
-| 9V nominal | ~10V | ❌ | Above OVP — chip enters protection, no charging. |
-| **12V nominal** (most common Amazon panel) | 18–22V | ❌ | Way above OVP. Chip survives (28V abs max) but never charges. **Kit silently fails.** |
+| **5V nominal, 1–6W** | 5.5–6V | ✅ **Recommended (kit SKU)** | Perfect match. Kit ships with FellDen 5-pack (1W each); buyer wires 2–3 in parallel. |
+| **6V nominal, 3–6W** | 6.5–7V | ✅ Works | Well below 10.5V OVP. Charge current scales with panel size. |
+| **9V nominal** | ~10–11V | ⚠️ Marginal | Right at the 10.5V OVP threshold. Cold-day Voc spikes can briefly clip into protection. Acceptable for warmer climates, risky for northern winters. |
+| **12V nominal** (most common Amazon panel) | 18–22V | ❌ | Above 10.5V OVP. Chip survives (28V abs max) but enters protection and never charges. **Kit silently fails.** |
 
 **Kit-recommended SKU: FellDen 5V 200mA panels, 110×60mm, 5-pack ([Amazon B0BML3PR4Z](https://www.amazon.com/dp/B0BML3PR4Z))**
 - 5V nominal, Voc ~5.5–6V (well under BQ24074's 6.45V OVP)
@@ -166,13 +171,13 @@ End-to-end consolidation across BOM sections 1–5.
 
 | Category | Unique parts |
 |---|---|
-| Resistors (0603 1%) | **9 values:** 0Ω, 470Ω, 1.13kΩ, 4.7kΩ, 5.1kΩ, 10kΩ, 11kΩ, 100kΩ, 1MΩ |
+| Resistors (0603 1%) | **10 values:** 0Ω, 33Ω, 470Ω, 1.13kΩ, 4.7kΩ, 5.1kΩ, 10kΩ, 11kΩ, 100kΩ, 1MΩ |
 | Capacitors (ceramic X7R + 1× aluminum electrolytic) | **6 values:** 10nF, 100nF, 1µF, 10µF (10V and 25V on same row), 22µF, 47µF aluminum |
-| Active discretes | **7 types:** MMBT3904, AO3401A, FS8205A, BZT52C12, ESD9B5.0, SMBJ24CA, KT-0603 bicolor LED |
+| Active discretes | **8 types:** MMBT3904, AO3401A, FS8205A, BZT52C12, ESD9B5.0, SMBJ24CA, **SS14**, KT-0603 bicolor LED |
 | ICs | **6 types:** ESP32-S3-WROOM-1-N8, BQ24074, TPS73633, DW01A, CH340C, USBLC6 |
 | Connectors / mechanical | **10 types:** USB-C 6-pin, KF128 ×3 sizes (2/3/5-pos), 4-pin female right-angle, 4-pin male vertical, 2×6 box header, microSD (unpopulated v1), Keystone 1042 18650 holder, polyfuse, tact switch |
-| **Total unique part types** | **38** |
-| **Total placements (populated v1)** | **~70 per board** |
+| **Total unique part types** | **40** |
+| **Total placements (populated v1)** | **~74 per board** (+ 2 SS14 OR-ing Schottkies, + 2 33Ω I²S series R) |
 
 **100nF placement count board-wide: 5** (2× module HF bypass + 2× CH340C [VCC + V3] + 1× VBUS HF). Useful for verifying the assembly BOM during fab review.
 
@@ -259,6 +264,8 @@ The "anything physically remote → daughtercard with one cable home-run" patter
 - microSD on IO_MUX SPI2 fast-path (GPIO10–13) → genuine 80MHz SD speed when populated.
 - 8 IR detectors contiguous on GPIO33–40 — matches WROOM-1's high-numbered edge for clean ribbon-cable routing.
 - USB pins (GPIO19/20) freed because flashing goes through CH340, not native USB-CDC.
+
+**⚠ PSRAM future-proofing trap:** the IR detector block at GPIO33–40 is **load-bearing on the N8 (no PSRAM) variant**. If this design is ever respun to an R8 module variant (e.g., N8R8 or N16R8) for 8MB PSRAM, **GPIO33–37 are internally consumed by the octal SPI PSRAM bus and can't be used as I/O** — five of the eight IR detectors stop working and the chip will crash if those pins are driven externally. If a high-memory variant of this kit is ever planned, remap the IR detectors to spare pins (e.g., GPIO19, 20, 42 plus a few of GPIO2/7/14) before the respin. Quad-PSRAM (R2) variants don't have this problem because they use chip-internal pins.
 
 Total assigned: 26 GPIOs (24 peripherals + 2 BQ24074 status). 7 spares for future expansion.
 
