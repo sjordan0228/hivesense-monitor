@@ -46,9 +46,8 @@ The deployed node is **two PCBs** plus off-board sensor modules.
 | RESET button (EN) | Same part as BOOT — TS-1187A-B-A (LCSC C720477) | |
 | Auto-reset NPNs ×2 | **MMBT3904** (LCSC C20526) | Classic two-transistor CH340 DTR/RTS → EN/IO0 circuit, Espressif reference. **Schematic note: tie into the same GPIO0 and EN nets as the manual BOOT/RESET buttons — don't route as separate nets.** |
 | Auto-reset base resistors ×2 | 10kΩ 0603 1% (LCSC C25804) | Base current limiting on the NPNs. |
-| Status LED | SMD bicolor red/green | (BOM scrub pending) Two GPIOs (47, 48). Firmware drives boot/associate/sleep/OTA states. |
 
-**Section cost:** ~$3.40/board (MCU module dominates).
+**Section cost:** ~$3.40/board (MCU module dominates). Status LED is BOM-locked in the sensor terminations + I/O section below.
 
 ### USB and programming — BOM-locked
 
@@ -65,7 +64,6 @@ The deployed node is **two PCBs** plus off-board sensor modules.
 | USB-C VBUS HF cap | 100nF 0603 X7R (LCSC C14663) | High-frequency bypass at VBUS entry. |
 
 **Section cost:** ~$0.72/board.
-**Running BOM total:** ~$5.42/board (power chain + MCU/reset/boot + USB/programming).
 
 **Schematic-capture notes:**
 1. Auto-reset NPN pair (in MCU/reset/boot section above) ties CH340C DTR/RTS into the **same** GPIO0 / EN nets as the manual BOOT/RESET buttons. Don't route as separate nets.
@@ -98,26 +96,35 @@ The deployed node is **two PCBs** plus off-board sensor modules.
 | TPS73633 — output cap | 22µF ceramic 10V X7R 0805 | **Stability-critical — must be ceramic, 2.2µF–47µF range. Don't substitute polymer.** |
 | TPS73633 — NR cap | 10nF ceramic 0603 | Optional noise-reduction pin cap. Populate. |
 | Battery voltage monitor | 1MΩ + 1MΩ divider + 10nF cap to GND at ADC tap → **GPIO1** (ADC1_CH0) | ~2.1µA continuous. 10nF anti-alias filter against ADC sample noise. No FET-gating needed. |
-| ESD on USB | USBLC6-2SC6 TVS array | D+/D−/VBUS. |
-| ESD on screw terminals | ESD9B/ESD9R on each external input | Cheap insurance for outdoor connectors. |
 
-**Power chain BOM cost:** ~$1.30/board at qty 20.
+(USB ESD and per-terminal ESD parts are BOM-locked in the USB/programming and sensor terminations + I/O sections respectively.)
 
-### Sensor terminations
+**Section cost:** ~$1.30/board at qty 20.
 
-| Sensor | Connector on carrier | Wires |
-|---|---|---|
-| Solar panel | 2-pos screw terminal | + / − |
-| Microphone | 5-pos screw terminal | VCC / GND / BCLK / LRCL / DOUT |
-| Temp probe (DS18B20) | 3-pos screw terminal + 4.7kΩ pull-up between DATA and VCC on carrier | VCC / DATA / GND |
-| IR pairs (×8) home-run | 12-pin 2.54mm IDC ribbon header | 8× detector signals + emitter-enable + Vcc + GND (+ 1 spare) |
-| HX711 scale | 4-pin 2.54mm right-angle female header + 2× M3 mounting holes | GND / DT / SCK / VCC (verify against kit module silkscreen before fab) |
-
-### Storage
+### Sensor terminations + I/O — BOM-locked
 
 | Item | Decision | Notes |
 |---|---|---|
-| microSD | Push-pull socket footprint, **unpopulated v1** | JLC charges per placement, not per pad — zero cost when unpopulated. Populate in later batch when audio + collector-down buffering features land. SPI bus reserved on layout. |
+| Solar screw terminal | KF128 3.5mm 2-pos (LCSC C8251) | Between polyfuse and P-FET. + / −. |
+| Mic screw terminal | KF128 3.5mm 5-pos (LCSC C396644) | VCC / GND / BCLK / LRCL / DOUT. **Verify stock at lcsc.com before fab — 5-pos is less common than 2/3-pos. Fallback: 2-pos + 3-pos adjacent.** |
+| DS18B20 screw terminal | KF128 3.5mm 3-pos (LCSC C8252) | VCC / DATA / GND. |
+| DS18B20 1-Wire pull-up | 4.7kΩ 0603 1% (LCSC C23162) | DATA to VCC on carrier. |
+| HX711 plug-in socket | 4-pin 2.54mm female header, right-angle (LCSC C146928) | Pin order: **GND / DT / SCK / VCC** (verified from kit photo). HX711 module mounts flat parallel to carrier. |
+| HX711 mechanical retention | 2× M3 unplated holes | Match HX711 module hole spacing (verify during layout). |
+| I²C expansion header | 4-pin 2.54mm male header, vertical (LCSC C124388) | SDA / SCL / 3V3 / GND. Silkscreen labels each pin. |
+| I²C SDA pull-up | 4.7kΩ 0603 1% (LCSC C23162) | To 3V3. |
+| I²C SCL pull-up | 4.7kΩ 0603 1% (LCSC C23162) | To 3V3. |
+| IR ribbon header | 2×6 2.54mm shrouded box header, vertical (LCSC C2840) | Polarization-keyed. Ships with matching IDC ribbon cable to the IR daughtercard. |
+| microSD socket | TF-01A push-pull (LCSC C91139) — **footprint reserved, unpopulated v1** | JLCPCB skips placement when not in assembly BOM. SPI bus on GPIO10–13 (IO_MUX fast-path). |
+| Status LED (bicolor R/G) | 0603 bicolor dual-LED, common anode — KT-0603SURKCGKC or equivalent (LCSC C2837) | Common anode → 3V3. Cathodes → GPIO47 (R) / GPIO48 (G) through 470Ω current-limit resistors. **Active LOW.** |
+| LED current-limit resistors ×2 | 470Ω 0603 1% (LCSC C23179) | One per cathode. ~5mA per color at 3V3. |
+| ESD protection on screw terminals ×3 | ESD9B5.0ST5G (LCSC C84669) | SOD-923. Place near solar, mic data lines, and DS18B20 screw terminals. IR ribbon ESD handled at daughtercard end (not carrier). |
+| 18650 battery holder | **Keystone 1042 PCB-mount** (LCSC C964175) | Premium choice for kit reliability — robust spring contacts, solid retention. ~$0.50 premium over AliExpress generic; worth it for non-maker users. |
+
+**Section cost:** ~$1.65/board.
+**Running BOM total (Sections 1–4):** ~$7.07/board.
+
+**Kit-docs note (not a carrier change):** I²S mic cable from carrier to the remote SPH0645 should be twisted-pair or shielded, kept under ~1m if possible. Long unshielded I²S clocks (1.5–3 MHz) pick up noise. Kit instructions should recommend cable type and length.
 
 ### 2.5 Solar panel sizing — important
 
