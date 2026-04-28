@@ -32,15 +32,25 @@ The deployed node is **two PCBs** plus off-board sensor modules.
 
 ## 2. Main Carrier — Locked Spec
 
-### MCU and programming
+### MCU and reset/boot — BOM-locked
 
 | Item | Decision | Notes |
 |---|---|---|
-| MCU module | **ESP32-S3-WROOM-1-N8** | 8MB flash, no PSRAM. All GPIOs free. |
-| Antenna | PCB antenna (WROOM-1 variant) | Carrier footprint also accepts WROOM-1U (U.FL) for low-signal installs. Same pinout. |
-| USB | USB-C connector + onboard CH340C USB-UART + DTR/RTS auto-reset circuit | Plug-and-play flashing across Mac/Win/Linux. CC pull-downs for USB-C compliance. |
-| Buttons | 2× SMD tact: BOOT (IO0) + RESET (EN) | Manual bootloader entry if OTA bricks itself. |
-| Status LED | SMD bicolor red/green | One footprint, two GPIOs. Firmware drives boot/associate/sleep/OTA states. |
+| MCU module | **ESP32-S3-WROOM-1-N8** (LCSC C2913198) | 8MB flash, no PSRAM. All GPIOs free. Footprint accepts both WROOM-1 (PCB antenna, 25.5×18mm) and WROOM-1U (U.FL, 19.2×18mm) — same pinout, U.FL fits within PCB-antenna outline. **JLCPCB requires an assembly fixture (one-time fee)** for this module. |
+| Antenna | PCB antenna (WROOM-1 default) | WROOM-1U swap available for low-signal installs without re-spin. |
+| Module bulk decoupling | 10µF 0805 X7R 10V (LCSC C15850) | At module 3V3 input pin. |
+| Module HF bypass | 100nF 0603 X7R ×2–3 (LCSC C14663) | Distributed near module pins 2 and 40. |
+| EN pull-up | 10kΩ 0603 1% (LCSC C25804) | Required by Espressif reference design — module won't boot without. |
+| EN filter cap | 1µF 0603 X7R (LCSC C15849) | RC delay ~10ms with EN pull-up; ensures stable power before reset release. Espressif reference. |
+| BOOT button (IO0) | SMD tact 6×6mm, **TS-1187A-B-A** (LCSC C720477) | Locked specific part — don't let JLCPCB auto-substitute (footprint variance breaks layout). |
+| RESET button (EN) | Same part as BOOT — TS-1187A-B-A (LCSC C720477) | |
+| Auto-reset NPNs ×2 | **MMBT3904** (LCSC C20526) | Classic two-transistor CH340 DTR/RTS → EN/IO0 circuit, Espressif reference. **Schematic note: tie into the same GPIO0 and EN nets as the manual BOOT/RESET buttons — don't route as separate nets.** |
+| Auto-reset base resistors ×2 | 10kΩ 0603 1% (LCSC C25804) | Base current limiting on the NPNs. |
+| USB-C connector + CH340C | (BOM scrub pending — §2.7 Section 3) | High-level: USB-C jack + CC pull-downs + CH340C USB-UART bridge + auto-reset (above). Plug-and-play flashing across Mac/Win/Linux. |
+| Status LED | SMD bicolor red/green | (BOM scrub pending) Two GPIOs (47, 48). Firmware drives boot/associate/sleep/OTA states. |
+
+**Section 2 cost:** ~$3.40/board (MCU module dominates).
+**Running BOM total:** ~$4.70/board (power chain + MCU/reset/boot).
 
 ### Power chain — BOM-locked
 
