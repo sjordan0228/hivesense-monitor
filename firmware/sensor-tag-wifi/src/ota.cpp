@@ -24,13 +24,36 @@
 
 namespace {
 
+/// Read `ota_host` from NVS and sanitize it.
+///
+/// Tolerates a leading `http://` or `https://` scheme (some users provision
+/// with a full URL — the URL template at the call site prepends its own
+/// `http://`, so a scheme here produces `http://http://host/...` which
+/// fails DNS resolution on the literal "http"). Also strips trailing
+/// slashes so `host/` doesn't produce `host//firmware/...`.
+///
+/// The OTA transport is HTTP-only by design (raw WiFiClient via
+/// `openHttpGet` — TLS is intentionally avoided to dodge the C6's
+/// OpenThread DNS64 path). Any scheme prefix is therefore informational
+/// at most and safe to discard.
 void readOtaHost(char* out, size_t outCap) {
     Preferences p;
     p.begin(NVS_NAMESPACE, true);
     String v = p.getString(NVS_KEY_OTA_HOST, OTA_DEFAULT_HOST);
     p.end();
-    size_t n = v.length() < outCap ? v.length() : outCap - 1;
-    memcpy(out, v.c_str(), n);
+
+    const char* host = v.c_str();
+    if (strncmp(host, "http://", 7) == 0) {
+        host += 7;
+    } else if (strncmp(host, "https://", 8) == 0) {
+        host += 8;
+    }
+
+    size_t n = strlen(host);
+    while (n > 0 && host[n - 1] == '/') --n;
+
+    if (n >= outCap) n = outCap - 1;
+    memcpy(out, host, n);
     out[n] = '\0';
 }
 
