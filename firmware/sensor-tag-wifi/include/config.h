@@ -77,6 +77,34 @@ constexpr uint8_t SHT31_ADDR                    = 0x44;
 constexpr uint16_t DS18B20_CONVERT_TIMEOUT_MS   = 800;
 constexpr uint8_t  DS18B20_RESOLUTION_BITS      = 12;
 
+// --- Scale (HX711) -----------------------------------------------------------
+#ifndef PIN_HX711_DT
+#define PIN_HX711_DT 16
+#endif
+#ifndef PIN_HX711_SCK
+#define PIN_HX711_SCK 17
+#endif
+constexpr uint8_t  PIN_HX711_DT_                = PIN_HX711_DT;
+constexpr uint8_t  PIN_HX711_SCK_               = PIN_HX711_SCK;
+
+constexpr uint8_t  HX711_GAIN                   = 128;
+constexpr uint8_t  HX711_TARE_SAMPLE_COUNT      = 16;
+constexpr uint8_t  HX711_VERIFY_SAMPLE_COUNT    = 16;
+constexpr uint8_t  HX711_STABLE_WINDOW_LEN      = 5;
+constexpr int32_t  HX711_STABLE_TOLERANCE_RAW   = 50;
+constexpr uint16_t HX711_STREAM_INTERVAL_MS     = 1000;
+constexpr uint16_t HX711_READ_TIMEOUT_MS        = 1000;
+constexpr double   HX711_CALIBRATE_MIN_FACTOR   = 1.0;   // |scale_factor| sanity floor
+constexpr double   HX711_DEFAULT_SCALE_FACTOR   = 1.0;   // NVS default — produces obviously-bad kg
+constexpr float    MODIFY_DELTA_THRESHOLD_KG    = 0.2f;  // < this absolute → modify_warning
+
+// --- Scale extended-awake / keep-alive --------------------------------------
+constexpr uint16_t HEARTBEAT_INTERVAL_MS        = 60000;
+constexpr int64_t  CLOCK_SKEW_TOLERANCE_SEC     = 300;   // ±5 min iOS clock skew
+constexpr int64_t  KEEPALIVE_NTP_FALLBACK_SEC   = 600;   // grace if NTP not synced
+constexpr uint16_t RETAINED_CONFIG_WAIT_MS      = 1500;  // post-subscribe wait
+constexpr uint16_t MODIFY_DEFAULT_TIMEOUT_SEC   = 600;
+
 // =============================================================================
 // Payload
 // =============================================================================
