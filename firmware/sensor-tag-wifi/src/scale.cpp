@@ -343,6 +343,11 @@ bool sample(int32_t& raw, double& kg) {
 }
 
 bool sampleAveraged(uint8_t n, int32_t& raw_mean, double& kg) {
+    if (!Config::isEnabled("feat_scale")) {
+        kg = NAN;
+        raw_mean = 0;
+        return false;
+    }
     constexpr uint8_t kMaxN = 20;
     if (n < 3) n = 3;  // need at least 3 to drop hi/lo and have remainder
     if (n > kMaxN) n = kMaxN;

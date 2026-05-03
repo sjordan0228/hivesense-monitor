@@ -24,7 +24,8 @@ void test_buildPayload_includes_all_required_fields() {
     TEST_ASSERT_GREATER_THAN(0u, n);
 
     JsonDocument doc;
-    deserializeJson(doc, buf, n);
+    auto err = deserializeJson(doc, buf, n);
+    TEST_ASSERT_EQUAL_INT(0, (int)err.code());
 
     // Per contract §3.1, capabilities has no `event` discriminator (its own dedicated topic).
     TEST_ASSERT_TRUE(doc["event"].isNull());
