@@ -26,6 +26,20 @@ static void appendEntry(AckEntry* entries, size_t* count,
 
 }  // namespace
 
+bool isConfigGetExcluded(const char* key) {
+    // §4.3/§7.2: these keys would brick the tag if mistyped remotely.
+    // Never return them in config/state, even if explicitly requested.
+    return strcmp(key, "wifi_pass") == 0 ||
+           strcmp(key, "mqtt_pass") == 0;
+}
+
+bool anyFeatKeyPresent(const AckEntry* entries, size_t numEntries) {
+    for (size_t i = 0; i < numEntries; ++i) {
+        if (strncmp(entries[i].key, "feat_", 5) == 0) return true;
+    }
+    return false;
+}
+
 size_t buildRichAck(const AckEntry* entries, size_t numEntries,
                     int64_t nowEpoch,
                     char* out, size_t outCap) {

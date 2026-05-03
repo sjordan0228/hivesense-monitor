@@ -316,7 +316,7 @@ void handleConfigMessage(const char* topic, const uint8_t* payload, size_t len) 
         // (any category — ok, unchanged, invalid, conflict) per the contract.
         // "Touched" is the correct gate: even an unchanged feat_* flag confirms
         // iOS's mental model of the capabilities state.
-        if (applied.anyFeatTouched) {
+        if (anyFeatKeyPresent(applied.entries, applied.numEntries)) {
             Serial.println("[CONFIG] re-publishing capabilities (feat_* touched)");
             if (!Capabilities::publish(rtcLastBootEpoch)) {
                 Serial.println("[CAP] re-publish after config failed");
@@ -408,6 +408,8 @@ void handleConfigGet(const char* /*topic*/, const uint8_t* payload, size_t len) 
     }
 
     auto shouldInclude = [&](const char* name) -> bool {
+        // Policy gate: never return excluded keys regardless of filter.
+        if (isConfigGetExcluded(name)) return false;
         if (includeAll) return true;
         for (size_t i = 0; i < numRequested; ++i) {
             if (strcmp(requestedKeys[i], name) == 0) return true;

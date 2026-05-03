@@ -233,6 +233,44 @@ void test_unchanged_category_serializes_in_rich_ack() {
     TEST_ASSERT_EQUAL_STRING("config_applied", doc["event"].as<const char*>());
 }
 
+// --- anyFeatKeyPresent (capabilities re-publish gate) ------------------------
+
+void test_should_republish_capabilities_when_feat_key_present() {
+    AckEntry entries[3];
+    strncpy(entries[0].key,    "sample_int",  sizeof(entries[0].key)  - 1); entries[0].key[sizeof(entries[0].key) - 1] = '\0';
+    strncpy(entries[0].result, "ok",          sizeof(entries[0].result) - 1); entries[0].result[sizeof(entries[0].result) - 1] = '\0';
+    strncpy(entries[1].key,    "feat_scale",  sizeof(entries[1].key)  - 1); entries[1].key[sizeof(entries[1].key) - 1] = '\0';
+    strncpy(entries[1].result, "ok",          sizeof(entries[1].result) - 1); entries[1].result[sizeof(entries[1].result) - 1] = '\0';
+    strncpy(entries[2].key,    "tag_name",    sizeof(entries[2].key)  - 1); entries[2].key[sizeof(entries[2].key) - 1] = '\0';
+    strncpy(entries[2].result, "unchanged",   sizeof(entries[2].result) - 1); entries[2].result[sizeof(entries[2].result) - 1] = '\0';
+    TEST_ASSERT_TRUE(anyFeatKeyPresent(entries, 3));
+}
+
+void test_should_not_republish_when_only_non_feat_keys() {
+    AckEntry entries[2];
+    strncpy(entries[0].key,    "sample_int",  sizeof(entries[0].key)  - 1); entries[0].key[sizeof(entries[0].key) - 1] = '\0';
+    strncpy(entries[0].result, "ok",          sizeof(entries[0].result) - 1); entries[0].result[sizeof(entries[0].result) - 1] = '\0';
+    strncpy(entries[1].key,    "tag_name",    sizeof(entries[1].key)  - 1); entries[1].key[sizeof(entries[1].key) - 1] = '\0';
+    strncpy(entries[1].result, "unchanged",   sizeof(entries[1].result) - 1); entries[1].result[sizeof(entries[1].result) - 1] = '\0';
+    TEST_ASSERT_FALSE(anyFeatKeyPresent(entries, 2));
+}
+
+void test_should_republish_when_feat_key_is_unchanged() {
+    // Even "unchanged" result on a feat_* key should trigger re-publish.
+    AckEntry entries[1];
+    strncpy(entries[0].key,    "feat_ds18b20", sizeof(entries[0].key)  - 1); entries[0].key[sizeof(entries[0].key) - 1] = '\0';
+    strncpy(entries[0].result, "unchanged",    sizeof(entries[0].result) - 1); entries[0].result[sizeof(entries[0].result) - 1] = '\0';
+    TEST_ASSERT_TRUE(anyFeatKeyPresent(entries, 1));
+}
+
+void test_should_republish_when_feat_key_is_conflict() {
+    // "conflict" result on a feat_* key — re-publish so iOS sees authoritative state.
+    AckEntry entries[1];
+    strncpy(entries[0].key,    "feat_sht31",          sizeof(entries[0].key)  - 1); entries[0].key[sizeof(entries[0].key) - 1] = '\0';
+    strncpy(entries[0].result, "conflict:feat_ds18b20", sizeof(entries[0].result) - 1); entries[0].result[sizeof(entries[0].result) - 1] = '\0';
+    TEST_ASSERT_TRUE(anyFeatKeyPresent(entries, 1));
+}
+
 // --- Unity runner ------------------------------------------------------------
 
 int main() {
@@ -252,5 +290,9 @@ int main() {
     RUN_TEST(test_ack_rich_format_includes_ts_rfc3339);
     RUN_TEST(test_ack_rich_format_zero_epoch_emits_sentinel);
     RUN_TEST(test_unchanged_category_serializes_in_rich_ack);
+    RUN_TEST(test_should_republish_capabilities_when_feat_key_present);
+    RUN_TEST(test_should_not_republish_when_only_non_feat_keys);
+    RUN_TEST(test_should_republish_when_feat_key_is_unchanged);
+    RUN_TEST(test_should_republish_when_feat_key_is_conflict);
     return UNITY_END();
 }

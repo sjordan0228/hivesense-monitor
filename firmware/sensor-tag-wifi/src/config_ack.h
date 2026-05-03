@@ -35,6 +35,20 @@ bool preValidate(const ConfigParser::ConfigUpdate& parsed,
                  const TemperatureNvsState& nvsState,
                  AckEntry* outEntries, size_t* outCount);
 
+/// Returns true if any entry in the given ack array has a key that starts with
+/// "feat_" — used to gate capabilities re-publish per contract §3.2.
+///
+/// "Touched" means any category (ok, unchanged, invalid, conflict) for a
+/// feat_* key.  Pure non-feat config writes (sample_int, tag_name, etc.)
+/// should not trigger a capabilities re-publish.
+bool anyFeatKeyPresent(const AckEntry* entries, size_t numEntries);
+
+/// Per-policy exclusion: returns true when the named key is excluded from
+/// config/state responses (wifi_pass, mqtt_pass per §4.3/§7.2).
+/// Used by handleConfigGet to prevent sensitive keys from leaking, even if
+/// explicitly requested in the `keys` filter.
+bool isConfigGetExcluded(const char* key);
+
 /// Build the rich ack JSON payload per config-mqtt-contract.md §5.1:
 ///
 ///   {"event":"config_applied","results":{<key>:<result>,...},"ts":"..."}
