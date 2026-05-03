@@ -12,6 +12,10 @@
 ///   upload_every  uint8   range 1..60
 ///   tag_name      string  ≤63 chars (NUL-terminated, fits in 64 buf)
 ///   ota_host      string  ≤63 chars (NUL-terminated, fits in 64 buf)
+///   feat_ds18b20  uint8   0 or 1 only; invalid:not_0_or_1 otherwise
+///   feat_sht31    uint8   0 or 1 only; mutually exclusive with feat_ds18b20
+///   feat_scale    uint8   0 or 1 only
+///   feat_mic      uint8   0 or 1 only
 ///
 /// All other keys are silently rejected — including v1-excluded keys
 /// (wifi_ssid, wifi_pass, mqtt_*) which would brick the device if
@@ -28,6 +32,13 @@ constexpr size_t   OTA_HOST_MAX_LEN   = 64;
 constexpr size_t   MAX_REJECTED_KEYS  = 8;
 constexpr size_t   REJECTED_KEY_LEN   = 32;
 
+/// Parsed feat_* flag value — distinguishes "not present" from 0/1.
+enum class FeatFlag : uint8_t {
+    Absent = 0xFF,  ///< key not in the payload
+    Off    = 0,
+    On     = 1,
+};
+
 /// Parse outcome. has_<x> flags indicate which keys were successfully
 /// extracted from the payload and pass validation. Rejected keys are
 /// listed by name for the ack message.
@@ -43,6 +54,12 @@ struct ConfigUpdate {
 
     bool     has_ota_host;
     char     ota_host[OTA_HOST_MAX_LEN];
+
+    // Feature flags — FeatFlag::Absent when the key was not in the payload.
+    FeatFlag feat_ds18b20;
+    FeatFlag feat_sht31;
+    FeatFlag feat_scale;
+    FeatFlag feat_mic;
 
     uint8_t  num_rejected;
     char     rejected[MAX_REJECTED_KEYS][REJECTED_KEY_LEN];

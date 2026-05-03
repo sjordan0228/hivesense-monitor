@@ -31,8 +31,30 @@ bool isAllowedStringValue(const char* s, size_t maxLen) {
 
 }  // namespace
 
+/// Parse a feat_* integer value that must be exactly 0 or 1.
+/// Returns FeatFlag::Absent on wrong type, FeatFlag::Off/On on valid value.
+/// Records key in rejected list with the "invalid:not_0_or_1" suffix on bad range.
+static FeatFlag parseFeatFlag(JsonVariant val, const char* key, ConfigUpdate& out) {
+    if (!val.is<int>()) {
+        recordReject(out, key);
+        return FeatFlag::Absent;
+    }
+    int v = val.as<int>();
+    if (v != 0 && v != 1) {
+        recordReject(out, key);
+        return FeatFlag::Absent;
+    }
+    return (v == 1) ? FeatFlag::On : FeatFlag::Off;
+}
+
 bool parse(const char* json, ConfigUpdate& out) {
     memset(&out, 0, sizeof(out));
+    // FeatFlag fields need explicit Absent initialisation (memset zeros them,
+    // but Absent = 0xFF so we must set explicitly after the memset).
+    out.feat_ds18b20 = FeatFlag::Absent;
+    out.feat_sht31   = FeatFlag::Absent;
+    out.feat_scale   = FeatFlag::Absent;
+    out.feat_mic     = FeatFlag::Absent;
 
     if (json == nullptr) return false;
 
@@ -107,6 +129,28 @@ bool parse(const char* json, ConfigUpdate& out) {
             }
             out.has_ota_host = true;
             copyString(out.ota_host, OTA_HOST_MAX_LEN, s);
+            continue;
+        }
+
+        // feat_* flags — each accepts exactly 0 or 1
+        if (strcmp(key, "feat_ds18b20") == 0) {
+            FeatFlag f = parseFeatFlag(kv.value(), key, out);
+            if (f != FeatFlag::Absent) out.feat_ds18b20 = f;
+            continue;
+        }
+        if (strcmp(key, "feat_sht31") == 0) {
+            FeatFlag f = parseFeatFlag(kv.value(), key, out);
+            if (f != FeatFlag::Absent) out.feat_sht31 = f;
+            continue;
+        }
+        if (strcmp(key, "feat_scale") == 0) {
+            FeatFlag f = parseFeatFlag(kv.value(), key, out);
+            if (f != FeatFlag::Absent) out.feat_scale = f;
+            continue;
+        }
+        if (strcmp(key, "feat_mic") == 0) {
+            FeatFlag f = parseFeatFlag(kv.value(), key, out);
+            if (f != FeatFlag::Absent) out.feat_mic = f;
             continue;
         }
 

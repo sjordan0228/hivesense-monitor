@@ -211,6 +211,48 @@ void test_empty_object_returns_true_no_apply() {
     TEST_ASSERT_EQUAL_UINT8(0, u.num_rejected);
 }
 
+// --- feat_* flag keys --------------------------------------------------------
+
+void test_parse_feat_scale_accepted() {
+    ConfigUpdate u;
+    TEST_ASSERT_TRUE(parse("{\"feat_scale\":1}", u));
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(ConfigParser::FeatFlag::On),
+                            static_cast<uint8_t>(u.feat_scale));
+    TEST_ASSERT_EQUAL_UINT8(0, u.num_rejected);
+}
+
+void test_parse_feat_scale_off_accepted() {
+    ConfigUpdate u;
+    TEST_ASSERT_TRUE(parse("{\"feat_scale\":0}", u));
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(ConfigParser::FeatFlag::Off),
+                            static_cast<uint8_t>(u.feat_scale));
+    TEST_ASSERT_EQUAL_UINT8(0, u.num_rejected);
+}
+
+void test_parse_feat_invalid_value_rejected() {
+    // feat_scale: 7 — only 0/1 allowed, should land in rejected list
+    ConfigUpdate u;
+    TEST_ASSERT_TRUE(parse("{\"feat_scale\":7}", u));
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(ConfigParser::FeatFlag::Absent),
+                            static_cast<uint8_t>(u.feat_scale));
+    TEST_ASSERT_TRUE(isInRejectedList(u, "feat_scale"));
+}
+
+void test_parse_all_four_feat_keys_round_trip() {
+    ConfigUpdate u;
+    TEST_ASSERT_TRUE(parse(
+        "{\"feat_ds18b20\":0,\"feat_sht31\":1,\"feat_scale\":1,\"feat_mic\":0}", u));
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(ConfigParser::FeatFlag::Off),
+                            static_cast<uint8_t>(u.feat_ds18b20));
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(ConfigParser::FeatFlag::On),
+                            static_cast<uint8_t>(u.feat_sht31));
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(ConfigParser::FeatFlag::On),
+                            static_cast<uint8_t>(u.feat_scale));
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(ConfigParser::FeatFlag::Off),
+                            static_cast<uint8_t>(u.feat_mic));
+    TEST_ASSERT_EQUAL_UINT8(0, u.num_rejected);
+}
+
 // --- Rejected-list capacity --------------------------------------------------
 
 void test_rejected_list_does_not_overflow() {
@@ -254,6 +296,11 @@ int main(int, char**) {
     RUN_TEST(test_unknown_key_rejected);
 
     RUN_TEST(test_valid_and_invalid_apply_partial);
+
+    RUN_TEST(test_parse_feat_scale_accepted);
+    RUN_TEST(test_parse_feat_scale_off_accepted);
+    RUN_TEST(test_parse_feat_invalid_value_rejected);
+    RUN_TEST(test_parse_all_four_feat_keys_round_trip);
 
     RUN_TEST(test_malformed_json_returns_false);
     RUN_TEST(test_array_top_level_returns_false);
