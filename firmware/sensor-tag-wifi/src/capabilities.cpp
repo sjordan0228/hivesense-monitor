@@ -26,7 +26,8 @@ size_t buildPayload(const FeatureFlags& flags, int64_t bootEpoch,
                     char* buf, size_t bufsz) {
     JsonDocument doc;
 
-    doc["event"]        = "capabilities";
+    // Per .mex/config-mqtt-contract.md §3.1: capabilities has its own
+    // dedicated topic — no `event` discriminator field.
     doc["feat_ds18b20"] = flags.feat_ds18b20;
     doc["feat_sht31"]   = flags.feat_sht31;
     doc["feat_scale"]   = flags.feat_scale;

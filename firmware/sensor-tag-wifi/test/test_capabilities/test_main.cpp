@@ -26,7 +26,8 @@ void test_buildPayload_includes_all_required_fields() {
     JsonDocument doc;
     deserializeJson(doc, buf, n);
 
-    TEST_ASSERT_FALSE(doc["event"].isNull());
+    // Per contract §3.1, capabilities has no `event` discriminator (its own dedicated topic).
+    TEST_ASSERT_TRUE(doc["event"].isNull());
     TEST_ASSERT_FALSE(doc["feat_ds18b20"].isNull());
     TEST_ASSERT_FALSE(doc["feat_sht31"].isNull());
     TEST_ASSERT_FALSE(doc["feat_scale"].isNull());
@@ -37,10 +38,12 @@ void test_buildPayload_includes_all_required_fields() {
     TEST_ASSERT_FALSE(doc["ts"].isNull());
 }
 
-void test_buildPayload_event_is_capabilities() {
+void test_buildPayload_omits_event_field() {
+    // Contract §3.1: capabilities is on its own dedicated topic — no
+    // discriminator field needed. iOS decoder enforces strict v1.1 schema.
     Capabilities::FeatureFlags flags { 1, 0, 0, 0 };
     auto doc = parsePayload(flags, 0LL);
-    TEST_ASSERT_EQUAL_STRING("capabilities", doc["event"].as<const char*>());
+    TEST_ASSERT_TRUE(doc["event"].isNull());
 }
 
 void test_buildPayload_last_boot_ts_rfc3339() {
@@ -81,7 +84,7 @@ void test_buildPayload_feat_flags_all_enabled() {
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_buildPayload_includes_all_required_fields);
-    RUN_TEST(test_buildPayload_event_is_capabilities);
+    RUN_TEST(test_buildPayload_omits_event_field);
     RUN_TEST(test_buildPayload_last_boot_ts_rfc3339);
     RUN_TEST(test_buildPayload_last_boot_ts_zero_emits_epoch_string);
     RUN_TEST(test_buildPayload_feat_flags_match_config);
