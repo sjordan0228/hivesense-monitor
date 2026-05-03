@@ -12,6 +12,9 @@ typedef void (*MessageHandler)(const char* topic,
                                const uint8_t* payload,
                                size_t len);
 
+/// Returns the MAC-derived 8-char device ID set during connect().
+const char* getDeviceId();
+
 /// Connect to the broker using credentials from NVS. Requires WiFi up.
 bool connect(const char* deviceId);
 

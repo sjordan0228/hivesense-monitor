@@ -73,13 +73,61 @@ void writeScaleToNvs(double scl) {
 
 namespace {
 
+char status_topic_[80] = {};
+char cmd_topic_[80]    = {};
+char config_topic_[80] = {};
+
+void buildTopics(const char* deviceId) {
+    snprintf(status_topic_, sizeof(status_topic_),
+             "combsense/hive/%s/scale/status", deviceId);
+    snprintf(cmd_topic_, sizeof(cmd_topic_),
+             "combsense/hive/%s/scale/cmd", deviceId);
+    snprintf(config_topic_, sizeof(config_topic_),
+             "combsense/hive/%s/scale/config", deviceId);
+}
+
 void publishStatusEvent(const char* json) {
-    char topic[80];
-    snprintf(topic, sizeof(topic), "combsense/hive/%s/scale/status",
-             /* deviceId — main.cpp owns this; will pass in later */ "");
-    // Actual publish call deferred — wired in Task 13 when subscribe() is added.
-    // For now this is a stub — full wiring in main integration task.
-    (void)json; (void)topic;
+    if (status_topic_[0] == '\0') return;
+    MqttClient::publishRaw(status_topic_, json, /*retained=*/false);
+}
+
+// Forward declarations for helpers defined later in this namespace
+void enterExtendedAwake(int64_t kau);
+void exitExtendedAwake();
+
+void handleConfigMessage(const char* payload, unsigned int len) {
+    if (len == 0) {
+        if (extended_awake_) exitExtendedAwake();
+        return;
+    }
+    JsonDocument doc;
+    if (deserializeJson(doc, payload, len)) return;
+    const char* kau_str = doc["keep_alive_until"].as<const char*>();
+    if (!kau_str) return;
+
+    // Parse RFC3339 (UTC only) → epoch using sscanf (strptime not available on ESP32 newlib)
+    int y, mo, d, h, mi, s;
+    if (sscanf(kau_str, "%d-%d-%dT%d:%d:%dZ", &y, &mo, &d, &h, &mi, &s) != 6) return;
+    struct tm tm_;
+    memset(&tm_, 0, sizeof(tm_));
+    tm_.tm_year = y - 1900;
+    tm_.tm_mon  = mo - 1;
+    tm_.tm_mday = d;
+    tm_.tm_hour = h;
+    tm_.tm_min  = mi;
+    tm_.tm_sec  = s;
+    // timegm not available on ESP32 newlib; temporarily set TZ to UTC and use mktime
+    setenv("TZ", "UTC0", 1);
+    tzset();
+    int64_t kau = static_cast<int64_t>(mktime(&tm_));
+
+    int64_t now = nowEpoch();
+    if (Scale::ntpSynced()) {
+        if (!isKeepAliveValid(kau, now)) return;
+    } else {
+        kau = now + KEEPALIVE_NTP_FALLBACK_SEC;
+    }
+    enterExtendedAwake(kau);
 }
 
 bool readSamples(int32_t* out, uint8_t n) {
@@ -284,11 +332,41 @@ bool sample(int32_t& raw, double& kg) {
     return true;
 }
 
-void subscribe() {}
+void subscribe() {
+    if (cmd_topic_[0] == '\0') buildTopics(MqttClient::getDeviceId());
+    MqttClient::subscribe(cmd_topic_);
+    MqttClient::subscribe(config_topic_);
+}
 
-void onMessage(const char* /*topic*/, const char* /*payload*/, unsigned int /*len*/) {}
+void onMessage(const char* topic, const char* payload, unsigned int len) {
+    if (strcmp(topic, config_topic_) == 0) {
+        handleConfigMessage(payload, len);
+        return;
+    }
+    if (strcmp(topic, cmd_topic_) == 0) {
+        ScaleCommand cmd;
+        if (!parseScaleCommand(payload, cmd)) return;
+        switch (cmd.type) {
+            case ScaleCommandType::Tare:         cmdTare(); break;
+            case ScaleCommandType::Calibrate:    cmdCalibrate(cmd.calibrate.known_kg); break;
+            case ScaleCommandType::Verify:       cmdVerify(cmd.verify.expected_kg); break;
+            case ScaleCommandType::StreamRaw:    cmdStreamRaw(cmd.stream_raw.duration_sec); break;
+            case ScaleCommandType::StopStream:   cmdStopStream(); break;
+            case ScaleCommandType::ModifyStart:  cmdModifyStart(cmd.modify.label); break;
+            case ScaleCommandType::ModifyEnd:    cmdModifyEnd(cmd.modify.label); break;
+            case ScaleCommandType::ModifyCancel: cmdModifyCancel(); break;
+        }
+    }
+}
 
-void onConnect() {}
+void onConnect() {
+    subscribe();
+    uint32_t deadline = millis() + RETAINED_CONFIG_WAIT_MS;
+    while (millis() < deadline) {
+        MqttClient::loop(10);
+        if (extended_awake_) break;
+    }
+}
 
 void tick() {
     if (!extended_awake_) return;

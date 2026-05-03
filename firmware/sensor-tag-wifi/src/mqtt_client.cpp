@@ -24,6 +24,8 @@ char mqttPass[64]   = "";
 
 MqttClient::MessageHandler g_handler = nullptr;
 
+char g_deviceId[9] = {};
+
 /// Trampoline from PubSubClient's callback signature into our public type.
 void pubsubCallback(char* topic, byte* payload, unsigned int length) {
     if (g_handler != nullptr) {
@@ -48,7 +50,13 @@ void loadConfig() {
 
 namespace MqttClient {
 
+const char* getDeviceId() {
+    return g_deviceId;
+}
+
 bool connect(const char* deviceId) {
+    strncpy(g_deviceId, deviceId, sizeof(g_deviceId) - 1);
+    g_deviceId[sizeof(g_deviceId) - 1] = '\0';
     loadConfig();
     pubsub.setServer(mqttHost, mqttPort);
     pubsub.setSocketTimeout(MQTT_CONNECT_TIMEOUT_MS / 1000);
