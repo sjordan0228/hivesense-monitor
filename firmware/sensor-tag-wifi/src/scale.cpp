@@ -308,6 +308,8 @@ namespace Scale {
 void init() {
     hx711.begin(PIN_HX711_DT_, PIN_HX711_SCK_, HX711_GAIN);
     hx711.power_up();
+    delay(450);                                          // datasheet: 400ms typ settling
+    if (hx711.wait_ready_timeout(500)) hx711.read();     // discard first conversion (gain settling)
     loadFromNvs();
     stable_.reset();
     extended_awake_ = false;
