@@ -6,6 +6,7 @@
 #include <esp_sleep.h>
 
 #include "config.h"
+#include "config_ack.h"
 #include "config_parser.h"
 #include "config_runtime.h"
 #include "capabilities.h"
@@ -78,13 +79,6 @@ WakeCfg loadConfig() {
 /// differ from what's already stored — preserves idempotency for retained
 /// MQTT messages. Populates `applied` and `currentState` with the post-
 /// write view, used by the ack message.
-// PR-2 will expand result strings to `category:detail` format (e.g.
-// "invalid:range", "excluded:security"). PR-1 uses "ok" / "unknown_key".
-struct AckEntry {
-    char key[16];
-    char result[32];   // "ok", "unchanged", "unknown_key", "excluded:...", "invalid:...", "conflict:..."
-};
-
 struct AckSummary {
     uint8_t  numEntries;
     AckEntry entries[ConfigParser::MAX_REJECTED_KEYS * 2];  // applied + rejected
@@ -169,19 +163,6 @@ AckSummary applyConfigToNvs(const ConfigParser::ConfigUpdate& u) {
 
     prefs.end();
     return s;
-}
-
-/// Pre-validation hook: called before the apply loop so PR-2 can enforce
-/// cross-key constraints (e.g. feat_ds18b20 ⊕ feat_sht31 mutual exclusion).
-///
-/// PR-1: no rules — always returns true.  outEntries and outCount are
-/// untouched; PR-2 will fill them with conflict AckEntry values.
-///
-/// Returns true when the parsed config may proceed to applyConfigToNvs.
-bool preValidate(const ConfigParser::ConfigUpdate& /*parsed*/,
-                 AckEntry* /*outEntries*/, size_t* outCount) {
-    if (outCount) *outCount = 0;
-    return true;
 }
 
 /// Handle a /config/get request — returns current NVS state as JSON.
