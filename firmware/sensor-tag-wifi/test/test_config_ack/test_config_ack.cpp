@@ -271,6 +271,17 @@ void test_should_republish_when_feat_key_is_conflict() {
     TEST_ASSERT_TRUE(anyFeatKeyPresent(entries, 1));
 }
 
+void test_anyFeatKeyPresent_includes_conflict_entries() {
+    // §3.2 trigger 3: preValidate-rejected feat_* entry in allEntries must cause re-publish.
+    // The combined entry array contains only a conflict-class feat_* entry.
+    AckEntry entries[2];
+    strncpy(entries[0].key,    "feat_sht31",           sizeof(entries[0].key)    - 1); entries[0].key[sizeof(entries[0].key) - 1]       = '\0';
+    strncpy(entries[0].result, "conflict:feat_ds18b20", sizeof(entries[0].result) - 1); entries[0].result[sizeof(entries[0].result) - 1] = '\0';
+    strncpy(entries[1].key,    "feat_ds18b20",          sizeof(entries[1].key)    - 1); entries[1].key[sizeof(entries[1].key) - 1]       = '\0';
+    strncpy(entries[1].result, "conflict:feat_sht31",   sizeof(entries[1].result) - 1); entries[1].result[sizeof(entries[1].result) - 1] = '\0';
+    TEST_ASSERT_TRUE(anyFeatKeyPresent(entries, 2));
+}
+
 // --- Unity runner ------------------------------------------------------------
 
 int main() {
@@ -294,5 +305,6 @@ int main() {
     RUN_TEST(test_should_not_republish_when_only_non_feat_keys);
     RUN_TEST(test_should_republish_when_feat_key_is_unchanged);
     RUN_TEST(test_should_republish_when_feat_key_is_conflict);
+    RUN_TEST(test_anyFeatKeyPresent_includes_conflict_entries);
     return UNITY_END();
 }

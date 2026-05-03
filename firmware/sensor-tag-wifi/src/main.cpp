@@ -311,16 +311,16 @@ void handleConfigMessage(const char* topic, const uint8_t* payload, size_t len) 
         snprintf(configTopic, sizeof(configTopic), "%s%s/config",
                  MQTT_TOPIC_PREFIX, deviceId);
         MqttClient::publishRaw(configTopic, "", /*retained=*/true);
+    }
 
-        // §3.2: re-publish capabilities only when a feat_* key was processed
-        // (any category — ok, unchanged, invalid, conflict) per the contract.
-        // "Touched" is the correct gate: even an unchanged feat_* flag confirms
-        // iOS's mental model of the capabilities state.
-        if (anyFeatKeyPresent(applied.entries, applied.numEntries)) {
-            Serial.println("[CONFIG] re-publishing capabilities (feat_* touched)");
-            if (!Capabilities::publish(rtcLastBootEpoch)) {
-                Serial.println("[CAP] re-publish after config failed");
-            }
+    // §3.2: re-publish capabilities when any feat_* key was processed — applies
+    // to both the apply path (ok/unchanged/invalid) AND the preValidate-conflict
+    // path (trigger 3).  iOS sees the re-publish and can reconcile rejected writes
+    // against the current authoritative capabilities state.
+    if (anyFeatKeyPresent(allEntries, numEntries)) {
+        Serial.println("[CONFIG] re-publishing capabilities (feat_* touched)");
+        if (!Capabilities::publish(rtcLastBootEpoch)) {
+            Serial.println("[CAP] re-publish after config failed");
         }
     }
 
