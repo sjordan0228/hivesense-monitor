@@ -83,7 +83,7 @@ Full happy-path sequence:
   "feat_mic":     0,
   "hw_board":     "xiao-c6",
   "fw_version":   "abc1234",
-  "last_boot_ts": 1777759713,
+  "last_boot_ts": "2026-05-03T19:42:00Z",
   "ts":           "2026-05-03T20:00:00Z"
 }
 ```
@@ -93,7 +93,7 @@ Full happy-path sequence:
 | `feat_*` | int (0 or 1) | Each present `feat_*` key reflects the current NVS value (or compile-time default if NVS is empty). Unknown `feat_*` keys NOT in the published payload mean "this firmware doesn't implement that feature." |
 | `hw_board` | string | Free-form board identifier. iOS doesn't branch on this for v1; useful for diagnostics and future "incompatible feature" warnings. Examples: `"xiao-c6"`, `"feather-s3"`. |
 | `fw_version` | string | Same git short-SHA already in the `reading` payload. Harmless duplication — lets the Settings screen show fw version without joining tables. |
-| `last_boot_ts` | int (epoch sec) | Set on cold boot (after NTP sync). iOS uses this to display "Last boot: 3h ago" in Settings, indicating tag liveness. If NTP wasn't synced at boot, firmware emits `0`; iOS displays this as "unknown". |
+| `last_boot_ts` | RFC3339 string (UTC `Z`, no fractional) | Set on cold boot (after NTP sync). iOS uses this to display "Last boot: 3h ago" in Settings, indicating tag liveness. If NTP wasn't synced at boot, firmware emits `"1970-01-01T00:00:00Z"`; iOS displays this as "unknown". (Format chosen for consistency with `ts` everywhere else in this contract.) |
 | `ts` | RFC3339 string (UTC `Z`, no fractional) | When firmware sent this capabilities message. |
 
 ### 3.2 Re-publish triggers
@@ -321,17 +321,19 @@ If iOS publishes a config change while the firmware is in extended-awake mode fo
 
 **iOS-side recommendation:** the SwiftUI navigation stack already prevents being in Settings AND the calibration wizard at the same time (one fullScreenCover at a time per hive). If we ever enable a side panel or split view, this needs revisiting.
 
-### 10.b Boot ordering — apply BEFORE publishing capabilities
+### 10.b Boot ordering — apply BEFORE publishing capabilities AND BEFORE sampling
 
 On cold boot, firmware:
 1. Reads NVS
-2. Subscribes
-3. Waits 1.5s for retained `scale/config` (per scale contract)
-4. **Also picks up retained `config` (this contract)** if present
-5. Applies the retained config (writes NVS, clears retain, publishes ack)
-6. **THEN** publishes capabilities reflecting the post-apply state
+2. Connects MQTT, subscribes
+3. Waits 1.5s for retained `scale/config` (per scale contract) AND retained `config` (this contract) to drain
+4. Applies any retained config (writes NVS, clears retain, publishes ack)
+5. **THEN** samples sensors per the (possibly newly-updated) `feat_*` flags — `reading` payload reflects post-apply state
+6. **THEN** publishes capabilities reflecting post-apply state
+7. Publishes `reading`
+8. (If extended-awake from `scale/config`, enter the wizard loop; else deep_sleep)
 
-So iOS never sees a transient "I just published `feat_scale:1` but capabilities still says `feat_scale:0`" window.
+This ordering means iOS never sees a transient mismatch between `reading.w` and `capabilities.feat_scale` — both reflect the same post-config-apply state on the same wake. Cost: zero extra time on a normal wake (the 1.5s retained-config drain window is shared with the existing `scale/config` wait), one wake of "right" data instead of one wake of stale-then-self-correct.
 
 ### 10.c New tag (first cold boot, no NVS values)
 
@@ -377,7 +379,7 @@ struct HiveCapabilities: Codable, Equatable {
     let featMic:     Bool
     let hwBoard:     String     // "xiao-c6", "feather-s3", ...
     let fwVersion:   String     // git short SHA
-    let lastBootTs:  Date?      // nil if firmware emitted 0 (NTP not yet synced)
+    let lastBootTs:  Date?      // nil if firmware emitted "1970-01-01T00:00:00Z" (NTP not yet synced)
     let ts:          Date
 
     private enum CodingKeys: String, CodingKey {
@@ -503,7 +505,7 @@ extension MQTTService {
 ### 12.1 capabilities
 
 ```json
-{"feat_ds18b20":1,"feat_sht31":0,"feat_scale":1,"feat_mic":0,"hw_board":"xiao-c6","fw_version":"abc1234","last_boot_ts":1777759713,"ts":"2026-05-03T20:00:00Z"}
+{"feat_ds18b20":1,"feat_sht31":0,"feat_scale":1,"feat_mic":0,"hw_board":"xiao-c6","fw_version":"abc1234","last_boot_ts":"2026-05-03T19:42:00Z","ts":"2026-05-03T20:00:00Z"}
 ```
 
 ### 12.2 config (iOS publishes — single feature toggle)
@@ -620,8 +622,8 @@ combsense/hive/c513131c/capabilities     →  {"feat_ds18b20":1,"feat_sht31":0,"
 
 ## 15. Versioning
 
-**Contract version:** 1.0
-**Locked:** 2026-05-03 (iOS + firmware Claude sessions agreed on §1–§3 and edge cases §i–§m)
+**Contract version:** 1.1
+**Locked:** 2026-05-03 (iOS + firmware Claude sessions agreed on §1–§3 and edge cases §i–§m; v1.1 clarified `last_boot_ts` as RFC3339 string and §10.b boot ordering as sample-AFTER-config-apply)
 **iOS PR-A target:** capabilities subscription + UI gating (read path only)
 **iOS PR-B target:** Settings screen + write path + ack handling
 **Firmware PR target:** runtime feature flags + capabilities publish + config_parser extension + rich ack + config/get → config/state
