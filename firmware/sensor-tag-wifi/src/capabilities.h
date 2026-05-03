@@ -14,8 +14,9 @@ struct FeatureFlags {
 };
 
 /// Build the capabilities JSON payload.
-/// Fields per config-mqtt-contract.md §3.1:
-///   event, feat_ds18b20, feat_sht31, feat_scale, feat_mic,
+/// Fields per config-mqtt-contract.md §3.1 (no `event` discriminator —
+/// capabilities has its own dedicated topic):
+///   feat_ds18b20, feat_sht31, feat_scale, feat_mic,
 ///   hw_board, fw_version, last_boot_ts, ts
 /// last_boot_ts is RFC3339 UTC. NTP-not-synced sentinel: "1970-01-01T00:00:00Z".
 /// ts is the current time at call.
