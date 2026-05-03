@@ -16,6 +16,8 @@
 #include "mqtt_client.h"
 #include "serial_console.h"
 #include "ota.h"
+#include "scale.h"
+#include <cmath>
 
 namespace {
 
@@ -150,6 +152,12 @@ size_t buildAckJson(const AckSummary& applied,
 /// subscribed topic. We only subscribe to one topic per session — the
 /// per-device config topic — so no topic dispatch is needed.
 void handleConfigMessage(const char* topic, const uint8_t* payload, size_t len) {
+    // Route scale/cmd and scale/config messages before config handling.
+    if (strncmp(topic, "combsense/hive/", 15) == 0 && strstr(topic, "/scale/")) {
+        Scale::onMessage(topic, reinterpret_cast<const char*>(payload), len);
+        return;
+    }
+
     Serial.printf("[CONFIG] received %u bytes on %s\n",
                   static_cast<unsigned>(len), topic);
 
@@ -218,12 +226,27 @@ void uploadAndCheckOta(uint8_t batteryPct) {
         MqttClient::subscribe(configTopic);
         MqttClient::loop(500);  // 500 ms drain window for retained config
 
+        // Subscribe to scale/cmd and scale/config; waits up to 1.5s for retained config.
+        Scale::onConnect();
+
         // Now drain readings.
         uint8_t sent = 0;
         while (RingBuffer::size() > 0) {
             Reading r;
             if (!RingBuffer::peekOldest(r)) break;
             if (!MqttClient::publish(deviceId, r, sessionRssi)) break;
+
+            // Dual-publish: also send dedicated weight topic for scale-aware consumers.
+            if (std::isfinite(r.weight_kg)) {
+                char weight_topic[80];
+                char weight_payload[16];
+                snprintf(weight_topic,   sizeof(weight_topic),
+                         "combsense/hive/%s/weight", deviceId);
+                snprintf(weight_payload, sizeof(weight_payload),
+                         "%.3f", static_cast<double>(r.weight_kg));
+                MqttClient::publishRaw(weight_topic, weight_payload, /*retained=*/false);
+            }
+
             RingBuffer::popOldest();
             sent++;
             Ota::onPublishSuccess();
@@ -262,6 +285,12 @@ void sampleAndEnqueue() {
     r.vbat_mV     = Battery::readMillivolts();
     r.battery_pct = Battery::percentFromMillivolts(r.vbat_mV);
     lastBatteryPct = r.battery_pct;
+
+    // Sample the scale (no-op stub when SCALE_ENABLED is not defined).
+    int32_t scale_raw = 0;
+    double  scale_kg  = NAN;
+    Scale::sample(scale_raw, scale_kg);
+    r.weight_kg = static_cast<float>(scale_kg);  // NaN if sample failed; payload omits the field
 
     // System clock is set by drainBuffer()'s NTP sync and persists across deep
     // sleep. Samples taken before the first successful upload are tagged 0 and
@@ -313,6 +342,8 @@ void setup() {
     Serial.printf("[MAIN] sample_int=%lus upload_every=%u\n",
                   (unsigned long)cfg.sampleIntervalSec, cfg.uploadEveryN);
 
+    Scale::init();
+
     sampleAndEnqueue();
     rtcSampleCounter++;
 
@@ -323,6 +354,17 @@ void setup() {
         Serial.printf("[MAIN] not uploading this cycle (%u/%u)\n",
                       rtcSampleCounter, cfg.uploadEveryN);
     }
+
+    // Extended-awake loop: keep radio alive while scale is accepting tare/cal commands.
+    if (Scale::inExtendedAwakeMode() && Scale::ntpSynced()) {
+        while (Scale::inExtendedAwakeMode()) {
+            MqttClient::loop(20);
+            Scale::tick();
+            delay(20);
+        }
+    }
+
+    Scale::deinit();
 
     Serial.printf("[MAIN] sleeping %lus\n", (unsigned long)cfg.sampleIntervalSec);
     Serial.flush();
